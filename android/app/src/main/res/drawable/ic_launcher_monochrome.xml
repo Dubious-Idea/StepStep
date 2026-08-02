@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer (Android 13+). The launcher tints this single shape with
+     the wallpaper palette, so it must be a flat silhouette with no colour of
+     its own — the progress ring alone, which is the app's one memorable form.
+
+     Drawn on the 108dp adaptive canvas; the ring sits inside the 66dp safe
+     zone so nothing is clipped by the mask. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ring, open at the lower left: an arc from 12 o'clock clockwise through
+         about 250 degrees, stroked and closed with round caps. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,28 A26,26 0 1 1 29.3,62.0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="10" />
+</vector>

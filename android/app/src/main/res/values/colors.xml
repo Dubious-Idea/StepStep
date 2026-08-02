@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors lib/theme/tokens.dart. Used by the widget, which draws its own
+     surface rather than inheriting the launcher's. -->
+<resources>
+    <color name="brand_background">#FF08090C</color>
+    <color name="brand_surface">#FF111319</color>
+    <color name="brand_surface_raised">#FF181B23</color>
+    <color name="brand_stroke">#FF232733</color>
+
+    <color name="brand_text_primary">#FFF4F5F7</color>
+    <color name="brand_text_secondary">#FF8A90A0</color>
+    <color name="brand_text_muted">#FF565C6B</color>
+
+    <color name="brand_accent_start">#FFA8FF3E</color>
+    <color name="brand_accent_mid">#FF22E8B4</color>
+    <color name="brand_accent_end">#FF4C7BFF</color>
+    <color name="brand_gold">#FFFFC94A</color>
+    <color name="brand_calories">#FFFF7A45</color>
+
+    <!-- Adaptive-icon backdrop. Light on purpose, matching the coffeeNetwork
+         family look — the launcher icon is the one surface that is not dark. -->
+    <color name="ic_launcher_background">#FFF4F4F6</color>
+</resources>

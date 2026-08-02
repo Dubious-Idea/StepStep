@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static stand-in for the Canvas-rendered ring, used only as the layout's
+     default so the widget picker shows something recognisable instead of an
+     empty box. Replaced by RingRenderer's bitmap the moment the widget is
+     placed and updated. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape
+            android:innerRadiusRatio="2.7"
+            android:shape="ring"
+            android:thicknessRatio="10"
+            android:useLevel="false">
+            <solid android:color="@color/brand_stroke" />
+        </shape>
+    </item>
+    <item>
+        <shape
+            android:innerRadiusRatio="2.7"
+            android:shape="ring"
+            android:thicknessRatio="10"
+            android:useLevel="false">
+            <gradient
+                android:centerColor="@color/brand_accent_mid"
+                android:endColor="@color/brand_accent_end"
+                android:startColor="@color/brand_accent_start"
+                android:type="sweep" />
+        </shape>
+    </item>
+</layer-list>

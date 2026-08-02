@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Raised chip behind each secondary stat, so the layout has two levels of
+     depth instead of one flat plane. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/brand_surface_raised" />
+    <corners android:radius="12dp" />
+</shape>

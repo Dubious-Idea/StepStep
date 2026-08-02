@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget. RemoteViews cannot host a custom view, so the ring is
+     a bitmap from RingRenderer and everything around it is stock widgets.
+     Hierarchy is carried by scale contrast: one 32sp figure against 9sp caps. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="@dimen/widget_padding">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:layout_width="96dp"
+            android:layout_height="96dp">
+
+            <ImageView
+                android:id="@+id/widget_ring"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/widget_steps_today"
+                android:src="@drawable/widget_ring_preview" />
+
+            <TextView
+                android:id="@+id/widget_percent"
+                android:text="0%"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:letterSpacing="-0.02"
+                android:textColor="@color/brand_text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                tools:text="74%" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="18dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_steps"
+                android:text="0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.04"
+                android:maxLines="1"
+                android:textColor="@color/brand_text_primary"
+                android:textSize="32sp"
+                tools:text="8 432" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:letterSpacing="0.14"
+                android:text="@string/widget_steps_today"
+                android:textAllCaps="true"
+                android:textColor="@color/brand_text_muted"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_goal"
+                android:text="@string/widget_goal_default"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:maxLines="1"
+                android:textColor="@color/brand_text_secondary"
+                android:textSize="12sp"
+                tools:text="Цель 12 000" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_stat_background"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="7dp">
+
+                    <TextView
+                        android:id="@+id/widget_kcal"
+                        android:text="0"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:textColor="@color/brand_calories"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="312" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="@string/unit_kcal"
+                        android:textColor="@color/brand_text_muted"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_stat_background"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="7dp">
+
+                    <TextView
+                        android:id="@+id/widget_distance"
+                        android:text="@string/widget_distance_default"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:textColor="@color/brand_accent_end"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="6.1 км" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

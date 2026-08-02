@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x2 by default: enough room for the ring and the stats without squeezing.
+
+     widgetCategory includes keyguard as a best effort — phones dropped
+     lock-screen widgets in Android 5 and only tablets got them back, so on a
+     phone the lock-screen presence comes from StepService's notification
+     instead. Declaring it costs nothing and lights up where supported.
+
+     updatePeriodMillis is only the floor: StepService repaints the widget as
+     steps come in, and this is the fallback for when it has been killed.
+     30 minutes is the shortest interval the platform actually honours. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/widget_steps"
+    android:minHeight="110dp"
+    android:minResizeHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minWidth="250dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:previewLayout="@layout/widget_steps"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen|keyguard" />

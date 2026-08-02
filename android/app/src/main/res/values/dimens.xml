@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overridden on API 31+ by the launcher's own widget corner radius so
+         the card sits flush in the grid instead of fighting it. -->
+    <dimen name="widget_corner_radius">26dp</dimen>
+    <dimen name="widget_padding">16dp</dimen>
+</resources>

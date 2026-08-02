@@ -1,0 +1,7 @@
+# Golden tests compare rendered pixels, and those differ between the machine
+# that recorded them and Linux CI (Skia version, font hinting). They stay
+# useful locally as a visual diff, so they are tagged rather than deleted and
+# CI runs `flutter test --exclude-tags golden`.
+tags:
+  golden:
+    description: Pixel comparisons; record and run on one machine only.
