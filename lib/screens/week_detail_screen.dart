@@ -81,7 +81,8 @@ class _DayRow extends StatelessWidget {
     final progress = goal <= 0 ? 1.0 : (day.steps / goal).clamp(0.0, 1.0);
 
     return Semantics(
-      label: '${day.fullName}, ${day.formattedDate}: '
+      label:
+          '${day.fullName}, ${day.formattedDate}: '
           '${formatSteps(day.steps)} шагов',
       child: SurfaceCard(
         padding: const EdgeInsets.symmetric(
@@ -102,8 +103,7 @@ class _DayRow extends StatelessWidget {
                     backgroundColor: AppColors.stroke,
                     valueColor: AlwaysStoppedAnimation<Color>(tint),
                   ),
-                  if (reached)
-                    Icon(Icons.check_rounded, size: 16, color: tint),
+                  if (reached) Icon(Icons.check_rounded, size: 16, color: tint),
                 ],
               ),
             ),

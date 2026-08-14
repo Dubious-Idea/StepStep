@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 /// GitHub repository releases are published to. Update checks read this repo's
 /// latest release and compare its tag against the installed version.
-const String kGithubRepo = 'Arti-Ko/StepStep';
+const String kGithubRepo = 'Dubious-Idea/StepStep';
 
 /// A release newer than the one installed.
 class AvailableUpdate {

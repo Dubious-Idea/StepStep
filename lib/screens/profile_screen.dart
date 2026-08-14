@@ -56,7 +56,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final parsed = int.tryParse(text);
     setState(() {
       _goalValid =
-          parsed != null && parsed >= Profile.minGoal && parsed <= Profile.maxGoal;
+          parsed != null &&
+          parsed >= Profile.minGoal &&
+          parsed <= Profile.maxGoal;
       if (parsed != null) _goal = parsed;
     });
   }
