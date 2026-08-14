@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/day_stats.dart';
 import '../models/profile.dart';
@@ -27,19 +28,37 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   static const StepBridge _bridge = StepBridge();
   static const StepPermissions _permissions = StepPermissions();
-  static const List<int> _goalPresets = [6000, 8000, 10000, 12000, 15000];
 
   late double _heightCm = widget.snapshot.heightCm.toDouble();
   late double _weightKg = widget.snapshot.weightKg;
   late int _goal = widget.snapshot.goal;
+  late final TextEditingController _goalController = TextEditingController(
+    text: '$_goal',
+  );
 
   bool _liveNotification = true;
   bool _isSaving = false;
+  bool _goalValid = true;
 
   @override
   void initState() {
     super.initState();
     _loadNotificationSetting();
+  }
+
+  @override
+  void dispose() {
+    _goalController.dispose();
+    super.dispose();
+  }
+
+  void _onGoalChanged(String text) {
+    final parsed = int.tryParse(text);
+    setState(() {
+      _goalValid =
+          parsed != null && parsed >= Profile.minGoal && parsed <= Profile.maxGoal;
+      if (parsed != null) _goal = parsed;
+    });
   }
 
   Future<void> _loadNotificationSetting() async {
@@ -48,9 +67,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   bool get _hasChanges =>
-      _heightCm.round() != widget.snapshot.heightCm ||
-      _weightKg != widget.snapshot.weightKg ||
-      _goal != widget.snapshot.goal;
+      _goalValid &&
+      (_heightCm.round() != widget.snapshot.heightCm ||
+          _weightKg != widget.snapshot.weightKg ||
+          _goal != widget.snapshot.goal);
 
   Future<void> _toggleNotification(bool enabled) async {
     setState(() => _liveNotification = enabled);
@@ -131,17 +151,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: AppSpacing.xl),
                   Text('ЦЕЛЬ НА ДЕНЬ', style: AppText.label),
                   const SizedBox(height: AppSpacing.md),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    children: [
-                      for (final preset in _goalPresets)
-                        _Chip(
-                          label: formatSteps(preset),
-                          isSelected: preset == _goal,
-                          onTap: () => setState(() => _goal = preset),
-                        ),
-                    ],
+                  _GoalInput(
+                    controller: _goalController,
+                    isValid: _goalValid,
+                    onChanged: _onGoalChanged,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   _NotificationToggle(
@@ -200,51 +213,66 @@ class _Field extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
+/// Freeform replacement for the old goal presets: a plain number field rather
+/// than a fixed set of chips, so any target in range is a direct edit away
+/// instead of a guess at the nearest preset.
+class _GoalInput extends StatelessWidget {
+  const _GoalInput({
+    required this.controller,
+    required this.isValid,
+    required this.onChanged,
   });
 
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final TextEditingController controller;
+  final bool isValid;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        splashColor: AppColors.accentMid.withValues(alpha: 0.12),
-        child: AnimatedContainer(
-          duration: AppDuration.fast,
-          curve: AppCurves.inOut,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md,
-          ),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.accentMid.withValues(alpha: 0.14)
-                : AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: isSelected ? AppColors.accentMid : AppColors.stroke,
-            ),
-          ),
-          child: Text(
-            label,
-            style: AppText.labelBright.copyWith(
-              fontSize: 13,
-              letterSpacing: 0.2,
-              color: isSelected ? AppColors.accentMid : AppColors.textSecondary,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SurfaceCard(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.flag_outlined,
+                color: AppColors.accentMid,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: onChanged,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                  style: AppText.statValue.copyWith(fontSize: 22),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              Text('шагов', style: AppText.body.copyWith(fontSize: 13)),
+            ],
           ),
         ),
-      ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          isValid
+              ? 'От ${formatSteps(Profile.minGoal)} до ${formatSteps(Profile.maxGoal)}'
+              : 'Введите число от ${formatSteps(Profile.minGoal)} '
+                    'до ${formatSteps(Profile.maxGoal)}',
+          style: AppText.body.copyWith(
+            fontSize: 12,
+            color: isValid ? AppColors.textMuted : AppColors.calories,
+          ),
+        ),
+      ],
     );
   }
 }
