@@ -79,7 +79,29 @@ class DayEntry {
     'Сб',
   ];
 
+  static const List<String> _fullNames = [
+    'Воскресенье',
+    'Понедельник',
+    'Вторник',
+    'Среда',
+    'Четверг',
+    'Пятница',
+    'Суббота',
+  ];
+
   String get shortName => _shortNames[(weekday - 1).clamp(0, 6)];
+
+  String get fullName => _fullNames[(weekday - 1).clamp(0, 6)];
+
+  /// [dayKey] is always `yyyy-MM-dd`, straight from the native side.
+  DateTime get date => DateTime.parse(dayKey);
+
+  /// `14.08` — no year, since history never spans more than 30 days.
+  String get formattedDate {
+    final d = date;
+    return '${d.day.toString().padLeft(2, '0')}.'
+        '${d.month.toString().padLeft(2, '0')}';
+  }
 
   factory DayEntry.fromMap(Map<dynamic, dynamic> map) => DayEntry(
     dayKey: map['dayKey'] as String? ?? '',

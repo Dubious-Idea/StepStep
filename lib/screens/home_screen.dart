@@ -13,6 +13,7 @@ import '../widgets/step_ring.dart';
 import '../widgets/update_dialog.dart';
 import '../widgets/week_chart.dart';
 import 'profile_screen.dart';
+import 'week_detail_screen.dart';
 
 /// The one screen the app really is: today's ring, what it cost in calories,
 /// and how the week is going.
@@ -107,6 +108,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _load();
   }
 
+  void _openWeekDetail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WeekDetailScreen(days: _week, goal: _snapshot.goal),
+      ),
+    );
+  }
+
   Future<void> _requestPermission() async {
     final outcome = await _permissions.request();
     if (outcome.canCountSteps) {
@@ -164,7 +173,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: AppSpacing.xxl),
               _StatsGrid(snapshot: _snapshot),
               const SizedBox(height: AppSpacing.lg),
-              _WeekSection(days: _week, goal: _snapshot.goal),
+              _WeekSection(
+                days: _week,
+                goal: _snapshot.goal,
+                onTap: _week.isEmpty ? null : _openWeekDetail,
+              ),
             ],
           ),
         ),
@@ -392,10 +405,11 @@ class _StatsGrid extends StatelessWidget {
 }
 
 class _WeekSection extends StatelessWidget {
-  const _WeekSection({required this.days, required this.goal});
+  const _WeekSection({required this.days, required this.goal, this.onTap});
 
   final List<DayEntry> days;
   final int goal;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -403,6 +417,7 @@ class _WeekSection extends StatelessWidget {
     final average = days.isEmpty ? 0 : total ~/ days.length;
 
     return SurfaceCard(
+      onTap: onTap,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.lg,
@@ -429,6 +444,14 @@ class _WeekSection extends StatelessWidget {
                   style: AppText.body.copyWith(fontSize: 12),
                 ),
               ),
+              if (onTap != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
