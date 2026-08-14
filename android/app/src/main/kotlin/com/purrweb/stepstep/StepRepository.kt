@@ -7,6 +7,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.ceil
 
 /**
  * Single source of truth for step data.
@@ -104,16 +105,7 @@ class StepRepository(context: Context) {
         val newTotal = prefs.getInt(stepsKey(day), 0) + delta
 
         val editor = prefs.edit().putInt(stepsKey(day), newTotal)
-
-        // Count each wall-clock minute that saw movement exactly once. This is
-        // what turns a step total into a walking *speed*, which the calorie
-        // model needs — see Metrics.activeKcal.
-        val minuteStamp = nowMillis / 60_000L
-        if (prefs.getLong(KEY_LAST_ACTIVE_MINUTE, -1L) != minuteStamp) {
-            editor.putLong(KEY_LAST_ACTIVE_MINUTE, minuteStamp)
-            editor.putInt(activeKey(day), prefs.getInt(activeKey(day), 0) + 1)
-        }
-
+        creditActiveMinutes(editor, day, delta, nowMillis)
         editor.apply()
 
         if (prefs.getString(KEY_CURRENT_DAY, null) != day) {
@@ -121,6 +113,57 @@ class StepRepository(context: Context) {
             pruneHistory(nowMillis)
         }
         return newTotal
+    }
+
+    /**
+     * Turns a step total into walking *time*, which the calorie model needs
+     * — see [Metrics.activeKcal].
+     *
+     * `TYPE_STEP_COUNTER` events are batched by the OS and can arrive minutes
+     * apart, each carrying every step taken since the last one. Crediting a
+     * flat one minute per callback (the previous behaviour) badly undercounts
+     * a burst delivered after the app sat quiet for a while, and just as
+     * badly overcounts a trickle of noise events spread one-per-minute.
+     * Instead this estimates how many of the minutes since the last reading
+     * were actually spent walking, from the step delta at a plausible
+     * cadence, then caps that estimate by how much wall-clock time really
+     * passed — so a reading can never claim more active time than elapsed,
+     * regardless of how sparsely events arrive. That cap is what makes this
+     * safe to run purely off whatever events the sensor happens to deliver,
+     * without needing a service kept alive to poll more often.
+     */
+    private fun creditActiveMinutes(
+        editor: SharedPreferences.Editor,
+        day: String,
+        delta: Int,
+        nowMillis: Long,
+    ) {
+        val minuteStamp = nowMillis / 60_000L
+        val lastEventMillis = prefs.getLong(KEY_LAST_EVENT_MILLIS, -1L)
+        val lastCreditedMinute = prefs.getLong(KEY_LAST_ACTIVE_MINUTE, -1L)
+
+        val estimatedMinutes = ceil(delta / Metrics.FALLBACK_CADENCE_STEPS_PER_MIN)
+            .toLong()
+            .coerceAtLeast(1L)
+        val elapsedMinutes = if (lastEventMillis < 0) {
+            1L
+        } else {
+            ((nowMillis - lastEventMillis) / 60_000L).coerceAtLeast(1L)
+        }
+        val minutesToCredit = minOf(estimatedMinutes, elapsedMinutes)
+
+        // Minutes already credited by a previous call must not be counted
+        // again, so the credited range starts right after them.
+        val rangeStart = minuteStamp - minutesToCredit + 1
+        val creditFrom = maxOf(rangeStart, lastCreditedMinute + 1)
+
+        if (creditFrom <= minuteStamp) {
+            val newlyCredited = (minuteStamp - creditFrom + 1).toInt()
+            editor.putInt(activeKey(day), prefs.getInt(activeKey(day), 0) + newlyCredited)
+        }
+
+        editor.putLong(KEY_LAST_ACTIVE_MINUTE, minuteStamp)
+        editor.putLong(KEY_LAST_EVENT_MILLIS, nowMillis)
     }
 
     // --------------------------------------------------------------- history
@@ -239,6 +282,7 @@ class StepRepository(context: Context) {
         private const val KEY_SKIPPED_VERSION = "update_skipped_version"
         private const val KEY_LAST_RAW = "sensor_last_raw"
         private const val KEY_LAST_ACTIVE_MINUTE = "sensor_last_active_minute"
+        private const val KEY_LAST_EVENT_MILLIS = "sensor_last_event_millis"
         private const val KEY_CURRENT_DAY = "sensor_current_day"
 
         private const val PREFIX_STEPS = "steps_"
