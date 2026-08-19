@@ -186,6 +186,31 @@ class StepRepository(context: Context) {
         }
     }
 
+    /**
+     * Steps for every day from [startDayKey] to [endDayKey], inclusive,
+     * oldest first — unlike [history], not anchored to today. Backs the
+     * month/year browser, which needs arbitrary ranges rather than "the last
+     * N days". Days outside the retained [HISTORY_DAYS] window read back as
+     * zero rather than failing, so a gap shows as an honest empty day.
+     */
+    fun historyRange(startDayKey: String, endDayKey: String): List<DayEntry> {
+        val calendar = Calendar.getInstance().apply { time = formatter().parse(startDayKey)!! }
+        val end = formatter().parse(endDayKey)!!
+
+        val entries = mutableListOf<DayEntry>()
+        while (!calendar.time.after(end)) {
+            val key = dayKey(calendar.timeInMillis)
+            entries += DayEntry(
+                dayKey = key,
+                steps = stepsOn(key),
+                activeMinutes = activeMinutesOn(key),
+                weekday = calendar.get(Calendar.DAY_OF_WEEK),
+            )
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return entries
+    }
+
     /** Drops day records older than [HISTORY_DAYS] so prefs cannot grow forever. */
     private fun pruneHistory(nowMillis: Long) {
         val keep = history(HISTORY_DAYS, nowMillis).map { it.dayKey }.toSet()
@@ -263,7 +288,10 @@ class StepRepository(context: Context) {
 
     companion object {
         const val PREFS_NAME = "stepstep_data"
-        const val HISTORY_DAYS = 30
+
+        /** ~13 months: enough for the year browser to cover "this month last
+         * year" even right after the year rolls over. */
+        const val HISTORY_DAYS = 400
 
         private const val NO_RAW = -1L
 

@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 
 import '../models/day_stats.dart';
 import '../models/profile.dart';
+import 'calendar_math.dart';
 
 /// Typed client for the native step store (`MainActivity` on Android).
 ///
@@ -33,6 +34,29 @@ class StepBridge {
     try {
       final raw = await _channel.invokeListMethod<dynamic>('getHistory', {
         'days': days,
+      });
+      if (raw == null) return const [];
+      return raw
+          .whereType<Map<dynamic, dynamic>>()
+          .map(DayEntry.fromMap)
+          .toList(growable: false);
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  /// Steps for every day from [start] to [end], inclusive — unlike [history],
+  /// not anchored to today. Backs the month/year browser.
+  Future<List<DayEntry>> historyRange({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    try {
+      final raw = await _channel.invokeListMethod<dynamic>('getHistoryRange', {
+        'start': dayKeyOf(start),
+        'end': dayKeyOf(end),
       });
       if (raw == null) return const [];
       return raw

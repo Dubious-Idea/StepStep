@@ -5,8 +5,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stepstep/screens/home_screen.dart';
+import 'package:stepstep/screens/month_screen.dart';
 import 'package:stepstep/screens/onboarding_screen.dart';
+import 'package:stepstep/screens/week_detail_screen.dart';
+import 'package:stepstep/screens/year_screen.dart';
 import 'package:stepstep/theme/app_theme.dart';
+
+/// Fabricates a plausible day for every date the caller asked
+/// `getHistoryRange` for, with a day key that actually matches what
+/// [MonthScreen]/[WeekDetailScreen] look up — a mismatched key would just
+/// render every cell as zero, which defeats the point of a visual snapshot.
+List<Map<String, dynamic>> _syntheticRange(Map<dynamic, dynamic> arguments) {
+  final start = DateTime.parse(arguments['start'] as String);
+  final end = DateTime.parse(arguments['end'] as String);
+
+  final days = <Map<String, dynamic>>[];
+  var date = start;
+  var i = 0;
+  while (!date.isAfter(end)) {
+    days.add({
+      'dayKey':
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'steps': (i * 733) % 14000,
+      'activeMinutes': 20 + (i % 6) * 12,
+      'weekday': (date.weekday % 7) + 1,
+    });
+    date = date.add(const Duration(days: 1));
+    i++;
+  }
+  return days;
+}
 
 /// Pixel snapshots of the two screens that carry the design.
 ///
@@ -40,6 +70,9 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'getHistoryRange') {
+            return _syntheticRange(call.arguments as Map<dynamic, dynamic>);
+          }
           return switch (call.method) {
             'getSnapshot' || 'refreshFromSensor' || 'saveProfile' => snapshot,
             'getHistory' => week,
@@ -87,6 +120,43 @@ void main() {
     await expectLater(
       find.byType(OnboardingScreen),
       matchesGoldenFile('onboarding_height.png'),
+    );
+  });
+
+  testWidgets('week detail', (tester) async {
+    usePhoneViewport(tester);
+    await tester.pumpWidget(
+      wrap(WeekDetailScreen(startDate: DateTime(2026, 7, 27), goal: 12000)),
+    );
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(WeekDetailScreen),
+      matchesGoldenFile('week_detail.png'),
+    );
+  });
+
+  testWidgets('month screen', (tester) async {
+    usePhoneViewport(tester);
+    await tester.pumpWidget(
+      wrap(MonthScreen(year: 2026, month: 7, goal: 12000)),
+    );
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(MonthScreen),
+      matchesGoldenFile('month_screen.png'),
+    );
+  });
+
+  testWidgets('year screen', (tester) async {
+    usePhoneViewport(tester);
+    await tester.pumpWidget(wrap(YearScreen(initialYear: 2026, goal: 12000)));
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(YearScreen),
+      matchesGoldenFile('year_screen.png'),
     );
   });
 }

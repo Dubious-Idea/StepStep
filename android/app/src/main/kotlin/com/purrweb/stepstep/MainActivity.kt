@@ -76,6 +76,18 @@ class MainActivity : FlutterActivity() {
                 result.success(entries)
             }
 
+            // Arbitrary date range, for the month/year browser — unlike
+            // getHistory this is not anchored to today.
+            "getHistoryRange" -> {
+                val start = call.argument<String>("start")
+                val end = call.argument<String>("end")
+                if (start == null || end == null) {
+                    result.success(emptyList<Map<String, Any>>())
+                } else {
+                    result.success(repository.historyRange(start, end).map { it.toMap() })
+                }
+            }
+
             "saveProfile" -> {
                 repository.heightCm = call.argument<Int>("heightCm") ?: repository.heightCm
                 repository.weightKg = call.argument<Double>("weightKg") ?: repository.weightKg
@@ -83,7 +95,7 @@ class MainActivity : FlutterActivity() {
                 repository.isOnboarded = true
                 // Both outside surfaces show calories, so they go stale the
                 // moment weight or height changes.
-                StepWidgetProvider.updateAll(this)
+                Widgets.updateAll(this)
                 if (repository.isLiveNotificationEnabled) StepService.start(this)
                 result.success(repository.snapshot().toMap())
             }
@@ -193,7 +205,7 @@ class MainActivity : FlutterActivity() {
                 event.values.firstOrNull()?.let {
                     repository.recordRawCounter(it.toLong())
                 }
-                StepWidgetProvider.updateAll(this@MainActivity)
+                Widgets.updateAll(this@MainActivity)
                 result.success(repository.snapshot().toMap())
             }
 
