@@ -6,10 +6,12 @@ import '../models/profile.dart';
 import '../services/metrics.dart';
 import '../services/permissions.dart';
 import '../services/step_bridge.dart';
+import '../services/update_checker.dart';
 import '../theme/tokens.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/ruler_picker.dart';
 import '../widgets/stat_card.dart';
+import '../widgets/update_dialog.dart';
 
 /// Editing the same three numbers onboarding asked for, plus the switch for
 /// the lock-screen notification.
@@ -39,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _liveNotification = true;
   bool _isSaving = false;
   bool _goalValid = true;
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -86,6 +89,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
     await _bridge.setLiveNotificationEnabled(enabled);
+  }
+
+  /// Manual counterpart to the silent auto-check on the home screen — this
+  /// one always tells the user something, including "up to date" and
+  /// "couldn't reach GitHub", which the auto-check deliberately swallows.
+  Future<void> _checkForUpdates() async {
+    setState(() => _isCheckingUpdate = true);
+    const checker = UpdateChecker();
+    final result = await checker.check();
+    if (!mounted) return;
+    setState(() => _isCheckingUpdate = false);
+
+    if (result is UpdateAvailable) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => UpdateDialog(
+          update: result.update,
+          onInstall: () {
+            Navigator.of(dialogContext).pop();
+            checker.openUrl(result.update.downloadUrl);
+          },
+          onSkip: () {
+            Navigator.of(dialogContext).pop();
+            checker.skipVersion(result.update.version);
+          },
+        ),
+      );
+    } else if (result is UpToDate) {
+      _showMessage('У вас последняя версия');
+    } else {
+      _showMessage('Не удалось проверить обновления');
+    }
   }
 
   Future<void> _save() async {
@@ -162,6 +197,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _NotificationToggle(
                     value: _liveNotification,
                     onChanged: _toggleNotification,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _UpdateCheckRow(
+                    isChecking: _isCheckingUpdate,
+                    onTap: _isCheckingUpdate ? null : _checkForUpdates,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _Preview(heightCm: _heightCm.round(), weightKg: _weightKg),
@@ -320,6 +360,52 @@ class _NotificationToggle extends StatelessWidget {
             inactiveThumbColor: AppColors.textMuted,
             inactiveTrackColor: AppColors.surfaceRaised,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Manual, explicit counterpart to the silent auto-check on the home screen.
+class _UpdateCheckRow extends StatelessWidget {
+  const _UpdateCheckRow({required this.isChecking, required this.onTap});
+
+  final bool isChecking;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.system_update_alt_rounded,
+            color: AppColors.accentMid,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              'Проверить обновления',
+              style: AppText.title.copyWith(fontSize: 15),
+            ),
+          ),
+          if (isChecking)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accentMid,
+              ),
+            )
+          else
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textMuted,
+            ),
         ],
       ),
     );
