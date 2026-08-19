@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2x2: steps, goal, calories and distance in four cells over the same
+     fill background as the bar variant. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description_grid"
+    android:initialLayout="@layout/widget_steps_grid"
+    android:minHeight="180dp"
+    android:minResizeHeight="140dp"
+    android:minResizeWidth="140dp"
+    android:minWidth="180dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:previewLayout="@layout/widget_steps_grid"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen|keyguard" />

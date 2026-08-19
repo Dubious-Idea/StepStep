@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2x1: the smallest, "at a glance" size — just the step count over the
+     fill background. Real resize range on both axes, unlike the ring
+     widget's original info file. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description_bar"
+    android:initialLayout="@layout/widget_steps_bar"
+    android:minHeight="70dp"
+    android:minResizeHeight="60dp"
+    android:minResizeWidth="110dp"
+    android:minWidth="180dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:previewLayout="@layout/widget_steps_bar"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen|keyguard" />

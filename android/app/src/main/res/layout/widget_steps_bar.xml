@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Horizontal 2x1 widget. The whole background is the fill bitmap from
+     FillRenderer — no separate card drawable — since the point of this
+     variant is that the background itself is the progress indicator.
+     Text carries a shadow so it stays legible from solid black through to
+     the brightest part of the gradient. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_bar_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_bar_fill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/widget_steps_today"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_background" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="@dimen/widget_padding">
+
+        <TextView
+            android:id="@+id/widget_bar_steps"
+            android:text="0"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.03"
+            android:maxLines="1"
+            android:shadowColor="@color/brand_background"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="6"
+            android:textColor="@color/brand_text_primary"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            tools:text="8 432" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:letterSpacing="0.14"
+            android:shadowColor="@color/brand_background"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:text="@string/widget_steps_today"
+            android:textAllCaps="true"
+            android:textColor="@color/brand_text_primary"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</FrameLayout>

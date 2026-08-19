@@ -56,16 +56,45 @@
             android:exported="false"
             android:foregroundServiceType="health" />
 
-        <!-- Widget providers must be exported so the launcher can bind them. -->
+        <!-- Widget providers must be exported so the launcher can bind them.
+             Three separate receivers rather than one responsive layout: the
+             single-RemoteViews-per-size API needs API 31+, and minSdk here
+             is 26. Distinct labels are what let the three tell themselves
+             apart in the widget picker. -->
         <receiver
             android:name=".StepWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:label="@string/widget_label_ring">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/step_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".StepWidgetProviderBar"
+            android:exported="true"
+            android:label="@string/widget_label_bar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/step_widget_bar_info" />
+        </receiver>
+
+        <receiver
+            android:name=".StepWidgetProviderGrid"
+            android:exported="true"
+            android:label="@string/widget_label_grid">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/step_widget_grid_info" />
         </receiver>
 
         <receiver

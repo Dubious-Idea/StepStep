@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">StepStep</string>
-    <string name="widget_label">StepStep · Шаги</string>
+    <string name="widget_label_ring">StepStep · Кольцо</string>
     <string name="widget_description">Шаги, калории и прогресс дня</string>
+    <string name="widget_label_bar">StepStep · Полоса</string>
+    <string name="widget_description_bar">Шаги на заливаемом фоне цели</string>
+    <string name="widget_label_grid">StepStep · Сетка</string>
+    <string name="widget_description_grid">Шаги, цель, калории и дистанция на заливаемом фоне</string>
     <string name="widget_steps_today">Шагов сегодня</string>
     <string name="unit_kcal">ккал</string>
     <string name="label_distance">дистанция</string>
+    <string name="label_calories">калории</string>
     <string name="label_of_goal">от цели</string>
     <!-- Layout defaults, shown only in the widget picker preview. -->
     <string name="widget_goal_default">Цель 10 000</string>

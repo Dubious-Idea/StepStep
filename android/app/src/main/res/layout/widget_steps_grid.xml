@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Square-ish 2x2 widget: same fill background as the bar variant, with
+     steps/goal/calories/distance laid out as four cells so it stays legible
+     at a compact size. Text carries a shadow for the same reason as the bar
+     layout — it has to read against both solid black and the brightest part
+     of the gradient. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_grid_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_grid_fill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/widget_steps_today"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_background" />
+
+    <!-- Two rows of two cells, written out flat: RemoteViews cannot
+         merge/include across files at runtime the way a normal inflater
+         would with dynamic attrs, so there is no shared cell template. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="@dimen/widget_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_grid_steps"
+                    android:text="0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="-0.03"
+                    android:maxLines="1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="6"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    tools:text="8 432" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:text="@string/widget_steps_today"
+                    android:textAllCaps="true"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_grid_goal"
+                    android:text="@string/widget_goal_default"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    tools:text="Цель 12 000" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:text="@string/label_of_goal"
+                    android:textAllCaps="true"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="4dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_grid_kcal"
+                    android:text="0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    tools:text="312 ккал" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:text="@string/label_calories"
+                    android:textAllCaps="true"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_grid_distance"
+                    android:text="@string/widget_distance_default"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    tools:text="6.1 км" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.1"
+                    android:shadowColor="@color/brand_background"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:text="@string/label_distance"
+                    android:textAllCaps="true"
+                    android:textColor="@color/brand_text_primary"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

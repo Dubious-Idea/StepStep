@@ -146,7 +146,7 @@ class StepService : Service(), SensorEventListener {
         if (widgetDue) {
             lastWidgetSteps = snapshot.steps
             lastWidgetAt = now
-            StepWidgetProvider.updateAll(this)
+            Widgets.updateAll(this)
         }
     }
 
