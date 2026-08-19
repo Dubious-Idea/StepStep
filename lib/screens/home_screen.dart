@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/day_stats.dart';
+import '../services/calendar_math.dart';
 import '../services/metrics.dart';
 import '../services/permissions.dart';
 import '../services/step_bridge.dart';
@@ -14,6 +15,7 @@ import '../widgets/update_dialog.dart';
 import '../widgets/week_chart.dart';
 import 'profile_screen.dart';
 import 'week_detail_screen.dart';
+import 'year_screen.dart';
 
 /// The one screen the app really is: today's ring, what it cost in calories,
 /// and how the week is going.
@@ -111,7 +113,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _openWeekDetail() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => WeekDetailScreen(days: _week, goal: _snapshot.goal),
+        builder: (_) => WeekDetailScreen(
+          startDate: mondayOf(DateTime.now()),
+          goal: _snapshot.goal,
+        ),
+      ),
+    );
+  }
+
+  void _openCalendar() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            YearScreen(initialYear: DateTime.now().year, goal: _snapshot.goal),
       ),
     );
   }
@@ -126,60 +140,113 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _load();
   }
 
+  /// Rough height of whichever notice banner is showing, including its own
+  /// trailing gap — used only to size the ring and grid below, so it does
+  /// not need to be exact, just not wildly off.
+  double _bannerHeightEstimate() {
+    if (_canCountSteps && _hasSensor) return 0;
+    // The permission banner carries an extra action button the sensor
+    // banner doesn't.
+    return _canCountSteps ? 130 : 170;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.accentMid,
-          backgroundColor: AppColors.surface,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.screenPadding,
-              AppSpacing.lg,
-              AppSpacing.screenPadding,
-              AppSpacing.section,
-            ),
-            children: [
-              _Header(onSettings: _openProfile),
-              const SizedBox(height: AppSpacing.xl),
-              if (!_canCountSteps)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                  child: NoticeBanner(
-                    icon: Icons.lock_outline,
-                    title: 'Нет доступа к шагам',
-                    message:
-                        'Разрешите распознавание активности, чтобы StepStep '
-                        'считал шаги и показывал их на экране блокировки.',
-                    actionLabel: 'Разрешить',
-                    onAction: _requestPermission,
-                  ),
-                )
-              else if (!_hasSensor)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: AppSpacing.lg),
-                  child: NoticeBanner(
-                    icon: Icons.sensors_off_outlined,
-                    title: 'Датчик шагов не найден',
-                    message:
-                        'На этом устройстве нет аппаратного счётчика шагов, '
-                        'поэтому считать шаги не получится.',
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // StepRing sizes itself via its own LayoutBuilder, which cannot
+            // answer intrinsic-dimension queries — that rules out Expanded
+            // inside a sliver that probes intrinsics (SliverFillRemaining)
+            // to make the ring "fill the rest of the screen". Instead the
+            // available height is measured once, up front, and the ring and
+            // grid get explicit computed heights, leaving everything else at
+            // its natural size. The budget below is calibrated against the
+            // reference viewport in test/home_screen_render_test.dart, where
+            // it lands within a few pixels of the old fixed 300/184 — on a
+            // shorter screen it shrinks instead of pushing the week card off
+            // the bottom into a sliver of scroll.
+            const fixedChrome =
+                AppSpacing.lg + // ListView top padding
+                48 + // header row (IconButton's default tap target)
+                AppSpacing.xl + // gap under header
+                AppSpacing.xxl + // gap between ring and grid
+                AppSpacing.lg + // gap between grid and week card
+                190 + // week card (SurfaceCard + WeekChart), estimated
+                AppSpacing.section; // ListView bottom padding
+
+            final remainder =
+                constraints.maxHeight - fixedChrome - _bannerHeightEstimate();
+            // 230 keeps the ring's inner content — specifically the goal
+            // pill's icon + text row — wide enough not to overflow; below
+            // that the ring shrinks faster than its own contents do.
+            final heroHeight = (remainder * 0.62).clamp(230.0, 340.0);
+            // 184 was the old fixed height StatCard's content was designed
+            // against — below that its icon/value/footnote stack overflows,
+            // so this floor is not just a stylistic minimum.
+            final gridHeight = (remainder * 0.38).clamp(184.0, 210.0);
+
+            return RefreshIndicator(
+              onRefresh: _load,
+              color: AppColors.accentMid,
+              backgroundColor: AppColors.surface,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenPadding,
+                  AppSpacing.lg,
+                  AppSpacing.screenPadding,
+                  AppSpacing.section,
                 ),
-              _Hero(snapshot: _snapshot, isLoading: _isLoading),
-              const SizedBox(height: AppSpacing.xxl),
-              _StatsGrid(snapshot: _snapshot),
-              const SizedBox(height: AppSpacing.lg),
-              _WeekSection(
-                days: _week,
-                goal: _snapshot.goal,
-                onTap: _week.isEmpty ? null : _openWeekDetail,
+                children: [
+                  _Header(onSettings: _openProfile),
+                  const SizedBox(height: AppSpacing.xl),
+                  if (!_canCountSteps)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      child: NoticeBanner(
+                        icon: Icons.lock_outline,
+                        title: 'Нет доступа к шагам',
+                        message:
+                            'Разрешите распознавание активности, чтобы '
+                            'StepStep считал шаги и показывал их на '
+                            'экране блокировки.',
+                        actionLabel: 'Разрешить',
+                        onAction: _requestPermission,
+                      ),
+                    )
+                  else if (!_hasSensor)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: AppSpacing.lg),
+                      child: NoticeBanner(
+                        icon: Icons.sensors_off_outlined,
+                        title: 'Датчик шагов не найден',
+                        message:
+                            'На этом устройстве нет аппаратного счётчика '
+                            'шагов, поэтому считать шаги не получится.',
+                      ),
+                    ),
+                  SizedBox(
+                    height: heroHeight,
+                    child: _Hero(snapshot: _snapshot, isLoading: _isLoading),
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  SizedBox(
+                    height: gridHeight,
+                    child: _StatsGrid(snapshot: _snapshot),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _WeekSection(
+                    days: _week,
+                    goal: _snapshot.goal,
+                    onTap: _week.isEmpty ? null : _openWeekDetail,
+                    onOpenCalendar: _openCalendar,
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -230,19 +297,20 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     final animate = !MediaQuery.disableAnimationsOf(context);
 
+    // No fixed size here on purpose: the parent Expanded hands this exactly
+    // the height the current screen has room for, and StepRing's own
+    // LayoutBuilder already sizes itself to the shorter side of whatever
+    // box it gets.
     return Center(
-      child: SizedBox(
-        height: 300,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: isLoading ? 0 : snapshot.progress),
-          duration: animate ? AppDuration.ring : Duration.zero,
-          curve: AppCurves.outExpo,
-          builder: (context, progress, _) => StepRing(
-            progress: progress,
-            goalReached: snapshot.isGoalReached,
-            strokeWidth: 22,
-            child: _RingContents(snapshot: snapshot),
-          ),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: isLoading ? 0 : snapshot.progress),
+        duration: animate ? AppDuration.ring : Duration.zero,
+        curve: AppCurves.outExpo,
+        builder: (context, progress, _) => StepRing(
+          progress: progress,
+          goalReached: snapshot.isGoalReached,
+          strokeWidth: 22,
+          child: _RingContents(snapshot: snapshot),
         ),
       ),
     );
@@ -254,33 +322,39 @@ class _RingContents extends StatelessWidget {
 
   final StepSnapshot snapshot;
 
-  /// Widest the contents may get before they touch the ring's inner edge.
-  /// Derived from the 300px ring at a 22px stroke, with margin for the glow.
-  static const double _innerWidth = 205;
+  /// Fraction of the ring's own diameter the contents may use before they
+  /// touch its inner edge — ring size is no longer fixed, so this scales
+  /// with whatever diameter StepRing actually ends up at (originally tuned
+  /// at a 300px ring with a 22px stroke: 205 / 300 ≈ 0.68).
+  static const double _innerWidthFraction = 0.68;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: _innerWidth,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // A six-figure day ("124 305") is wider than the ring's inside at the
-          // display size, so the counter scales down rather than colliding
-          // with the arc.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: AnimatedCounter(
-              value: snapshot.steps,
-              style: AppText.display,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          width: constraints.maxWidth * _innerWidthFraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A six-figure day ("124 305") is wider than the ring's inside
+              // at the display size, so the counter scales down rather than
+              // colliding with the arc.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: AnimatedCounter(
+                  value: snapshot.steps,
+                  style: AppText.display,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text('ШАГОВ СЕГОДНЯ', style: AppText.label),
+              const SizedBox(height: AppSpacing.lg),
+              _GoalPill(snapshot: snapshot),
+            ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Text('ШАГОВ СЕГОДНЯ', style: AppText.label),
-          const SizedBox(height: AppSpacing.lg),
-          _GoalPill(snapshot: snapshot),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -336,11 +410,6 @@ class _StatsGrid extends StatelessWidget {
 
   final StepSnapshot snapshot;
 
-  /// Fixed rather than intrinsic: `IntrinsicHeight` around a `Row` whose child
-  /// is itself a flex column forces an extra, expensive intrinsic layout pass
-  /// on every rebuild — and the counter rebuilds on every sensor reading.
-  static const double _gridHeight = 184;
-
   /// Says what the number is made of, so the figure reads as a calculation
   /// rather than a guess — and explains why the app asked for height and
   /// weight in the first place.
@@ -354,62 +423,67 @@ class _StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: _gridHeight,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 5,
-            child: StatCard(
-              value: '${snapshot.kcal.round()}',
-              unit: 'ккал',
-              caption: 'Сожжено',
-              accent: AppColors.calories,
-              icon: Icons.local_fire_department_rounded,
-              emphasis: StatEmphasis.large,
-              footnote: _caloriesFootnote(snapshot),
-            ),
+    // No SizedBox here either — the parent Expanded already hands this a
+    // tight height, and CrossAxisAlignment.stretch fills it.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 5,
+          child: StatCard(
+            value: '${snapshot.kcal.round()}',
+            unit: 'ккал',
+            caption: 'Сожжено',
+            accent: AppColors.calories,
+            icon: Icons.local_fire_department_rounded,
+            emphasis: StatEmphasis.large,
+            footnote: _caloriesFootnote(snapshot),
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            flex: 4,
-            child: Column(
-              children: [
-                Expanded(
-                  child: StatCard(
-                    value: formatDistance(snapshot.distanceKm),
-                    unit: '',
-                    caption: 'Дистанция',
-                    accent: AppColors.distance,
-                    icon: Icons.timeline_rounded,
-                  ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          flex: 4,
+          child: Column(
+            children: [
+              Expanded(
+                child: StatCard(
+                  value: formatDistance(snapshot.distanceKm),
+                  unit: '',
+                  caption: 'Дистанция',
+                  accent: AppColors.distance,
+                  icon: Icons.timeline_rounded,
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Expanded(
-                  child: StatCard(
-                    value: formatActiveTime(snapshot.activeMinutes.toDouble()),
-                    unit: '',
-                    caption: 'В движении',
-                    accent: AppColors.activeTime,
-                    icon: Icons.bolt_rounded,
-                  ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Expanded(
+                child: StatCard(
+                  value: formatActiveTime(snapshot.activeMinutes.toDouble()),
+                  unit: '',
+                  caption: 'В движении',
+                  accent: AppColors.activeTime,
+                  icon: Icons.bolt_rounded,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _WeekSection extends StatelessWidget {
-  const _WeekSection({required this.days, required this.goal, this.onTap});
+  const _WeekSection({
+    required this.days,
+    required this.goal,
+    required this.onOpenCalendar,
+    this.onTap,
+  });
 
   final List<DayEntry> days;
   final int goal;
   final VoidCallback? onTap;
+  final VoidCallback onOpenCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -444,19 +518,48 @@ class _WeekSection extends StatelessWidget {
                   style: AppText.body.copyWith(fontSize: 12),
                 ),
               ),
-              if (onTap != null) ...[
-                const SizedBox(width: AppSpacing.xs),
+              const SizedBox(width: AppSpacing.xs),
+              _CalendarButton(onTap: onOpenCalendar),
+              if (onTap != null)
                 const Icon(
                   Icons.chevron_right_rounded,
                   size: 16,
                   color: AppColors.textMuted,
                 ),
-              ],
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
           WeekChart(days: days, goal: goal),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the year/month browser. A separate tap target nested inside the
+/// week card's own [SurfaceCard.onTap] — Flutter resolves the inner
+/// [InkWell] first, so this claims its tap before it reaches the card.
+class _CalendarButton extends StatelessWidget {
+  const _CalendarButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: const Padding(
+          padding: EdgeInsets.all(4),
+          child: Icon(
+            Icons.calendar_month_rounded,
+            size: 16,
+            color: AppColors.textMuted,
+          ),
+        ),
       ),
     );
   }
