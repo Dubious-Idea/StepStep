@@ -94,6 +94,59 @@ class UpdateChecker {
     }
   }
 
+  /// Whether the silent check on launch should run at all. Defaults to on —
+  /// a manual check from the profile screen ignores this entirely.
+  Future<bool> isAutoCheckEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('isAutoUpdateCheckEnabled') ??
+          true;
+    } on PlatformException {
+      return true;
+    } on MissingPluginException {
+      return true;
+    }
+  }
+
+  Future<void> setAutoCheckEnabled(bool enabled) async {
+    try {
+      await _channel.invokeMethod<void>('setAutoUpdateCheckEnabled', {
+        'enabled': enabled,
+      });
+    } on PlatformException {
+      // Worst case the setting doesn't stick until the next toggle.
+    } on MissingPluginException {
+      // Not running on a platform with the native side.
+    }
+  }
+
+  /// True once at least a day has passed since [recordAutoCheck] last ran —
+  /// throttles the launch-time check to once a day rather than every launch.
+  Future<bool> isAutoCheckDue() async {
+    try {
+      final millis =
+          await _channel.invokeMethod<int>('lastAutoUpdateCheckMillis') ?? 0;
+      if (millis == 0) return true;
+      final last = DateTime.fromMillisecondsSinceEpoch(millis);
+      return DateTime.now().difference(last) >= const Duration(days: 1);
+    } on PlatformException {
+      return true;
+    } on MissingPluginException {
+      return true;
+    }
+  }
+
+  Future<void> recordAutoCheck() async {
+    try {
+      await _channel.invokeMethod<void>('setLastAutoUpdateCheckMillis', {
+        'millis': DateTime.now().millisecondsSinceEpoch,
+      });
+    } on PlatformException {
+      // Worst case the next launch checks again sooner than once a day.
+    } on MissingPluginException {
+      // Not running on a platform with the native side.
+    }
+  }
+
   Future<bool> openUrl(String url) async {
     try {
       return await _channel.invokeMethod<bool>('openUrl', {'url': url}) ??

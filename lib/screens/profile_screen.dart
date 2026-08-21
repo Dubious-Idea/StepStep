@@ -42,11 +42,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSaving = false;
   bool _goalValid = true;
   bool _isCheckingUpdate = false;
+  bool _autoUpdateCheckEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _loadNotificationSetting();
+    _loadAutoUpdateCheckSetting();
   }
 
   @override
@@ -69,6 +71,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadNotificationSetting() async {
     final enabled = await _bridge.isLiveNotificationEnabled();
     if (mounted) setState(() => _liveNotification = enabled);
+  }
+
+  Future<void> _loadAutoUpdateCheckSetting() async {
+    const checker = UpdateChecker();
+    final enabled = await checker.isAutoCheckEnabled();
+    if (mounted) setState(() => _autoUpdateCheckEnabled = enabled);
+  }
+
+  Future<void> _toggleAutoUpdateCheck(bool enabled) async {
+    setState(() => _autoUpdateCheckEnabled = enabled);
+    const checker = UpdateChecker();
+    await checker.setAutoCheckEnabled(enabled);
   }
 
   bool get _hasChanges =>
@@ -197,6 +211,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _NotificationToggle(
                     value: _liveNotification,
                     onChanged: _toggleNotification,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _AutoUpdateCheckToggle(
+                    value: _autoUpdateCheckEnabled,
+                    onChanged: _toggleAutoUpdateCheck,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _UpdateCheckRow(
@@ -347,6 +366,53 @@ class _NotificationToggle extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   'Постоянное уведомление с кольцом прогресса',
+                  style: AppText.body.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.background,
+            activeTrackColor: AppColors.accentMid,
+            inactiveThumbColor: AppColors.textMuted,
+            inactiveTrackColor: AppColors.surfaceRaised,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AutoUpdateCheckToggle extends StatelessWidget {
+  const _AutoUpdateCheckToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_repeat_rounded,
+            color: AppColors.accentMid,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Автопроверка обновлений',
+                  style: AppText.title.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Раз в сутки при запуске приложения',
                   style: AppText.body.copyWith(fontSize: 12),
                 ),
               ],

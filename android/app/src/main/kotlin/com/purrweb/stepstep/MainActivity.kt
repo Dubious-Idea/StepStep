@@ -118,6 +118,21 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
             }
 
+            "isAutoUpdateCheckEnabled" -> result.success(repository.isAutoUpdateCheckEnabled)
+
+            "setAutoUpdateCheckEnabled" -> {
+                repository.isAutoUpdateCheckEnabled = call.argument<Boolean>("enabled") ?: true
+                result.success(null)
+            }
+
+            "lastAutoUpdateCheckMillis" -> result.success(repository.lastAutoUpdateCheckMillis)
+
+            "setLastAutoUpdateCheckMillis" -> {
+                repository.lastAutoUpdateCheckMillis =
+                    (call.argument<Number>("millis"))?.toLong() ?: System.currentTimeMillis()
+                result.success(null)
+            }
+
             "openUrl" -> {
                 val url = call.argument<String>("url").orEmpty()
                 result.success(openExternally(url))

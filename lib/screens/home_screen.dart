@@ -46,10 +46,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// The app ships outside any store, so this is the only way a new build
   /// reaches the user. Silent on failure and on "up to date" — an update check
-  /// that announces itself on every launch is noise.
+  /// that announces itself on every launch is noise. Throttled to once a day
+  /// and can be turned off entirely from the profile screen; the manual
+  /// "Проверить обновления" button there bypasses both.
   Future<void> _checkForUpdate() async {
     const checker = UpdateChecker();
+    if (!await checker.isAutoCheckEnabled() || !mounted) return;
+    if (!await checker.isAutoCheckDue() || !mounted) return;
+
     final result = await checker.check();
+    await checker.recordAutoCheck();
     if (result is! UpdateAvailable || !mounted) return;
 
     final skipped = await checker.skippedVersion();

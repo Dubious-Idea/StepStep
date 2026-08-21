@@ -59,6 +59,19 @@ class StepRepository(context: Context) {
         get() = prefs.getBoolean(KEY_LIVE_NOTIFICATION, true)
         set(value) = prefs.edit().putBoolean(KEY_LIVE_NOTIFICATION, value).apply()
 
+    /** Whether the app should check GitHub for a new release on launch. */
+    var isAutoUpdateCheckEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_UPDATE_CHECK, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_UPDATE_CHECK, value).apply()
+
+    /**
+     * When the auto-check last ran, so it can be throttled to once a day —
+     * a manual check from the profile screen ignores this and always runs.
+     */
+    var lastAutoUpdateCheckMillis: Long
+        get() = prefs.getLong(KEY_LAST_AUTO_UPDATE_CHECK, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_AUTO_UPDATE_CHECK, value).apply()
+
     // ------------------------------------------------------------ today state
 
     val todayKey: String get() = dayKey(System.currentTimeMillis())
@@ -308,6 +321,8 @@ class StepRepository(context: Context) {
         private const val KEY_ONBOARDED = "profile_onboarded"
         private const val KEY_LIVE_NOTIFICATION = "profile_live_notification"
         private const val KEY_SKIPPED_VERSION = "update_skipped_version"
+        private const val KEY_AUTO_UPDATE_CHECK = "update_auto_check_enabled"
+        private const val KEY_LAST_AUTO_UPDATE_CHECK = "update_last_auto_check_millis"
         private const val KEY_LAST_RAW = "sensor_last_raw"
         private const val KEY_LAST_ACTIVE_MINUTE = "sensor_last_active_minute"
         private const val KEY_LAST_EVENT_MILLIS = "sensor_last_event_millis"
