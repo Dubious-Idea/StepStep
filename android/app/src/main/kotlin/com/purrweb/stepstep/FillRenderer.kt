@@ -11,7 +11,8 @@ import android.graphics.Shader
 /**
  * Draws the "fill" progress background shared by the bar (2x1) and grid (2x2)
  * home-screen widgets: a rounded card that is solid black at 0% progress and
- * a full left-to-right accent gradient at 100%, wiping in between.
+ * a full accent gradient at 100%, wiping in between — left-to-right for the
+ * bar, bottom-to-top for the grid.
  *
  * Same reasoning as [RingRenderer]: `RemoteViews` cannot host a custom `View`
  * or a shader, so the background is rendered into a bitmap sized to the
@@ -42,6 +43,8 @@ object FillRenderer {
      *   the caller from `AppWidgetManager.getAppWidgetOptions` so the fill
      *   always spans the exact size the user resized it to.
      * @param progress  0f..1f
+     * @param vertical  false wipes left-to-right (the bar widget), true wipes
+     *   bottom-to-top (the grid widget).
      */
     fun render(
         widthPx: Int,
@@ -49,6 +52,7 @@ object FillRenderer {
         cornerRadiusPx: Float,
         progress: Float,
         goalReached: Boolean,
+        vertical: Boolean = false,
     ): Bitmap {
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
@@ -63,7 +67,11 @@ object FillRenderer {
 
         val fraction = progress.coerceIn(0f, 1f)
         if (fraction > 0f) {
-            drawFill(canvas, bounds, cornerRadiusPx, fraction, goalReached)
+            if (vertical) {
+                drawFillVertical(canvas, bounds, cornerRadiusPx, fraction, goalReached)
+            } else {
+                drawFillHorizontal(canvas, bounds, cornerRadiusPx, fraction, goalReached)
+            }
         }
 
         val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -76,7 +84,13 @@ object FillRenderer {
         return bitmap
     }
 
-    private fun drawFill(
+    private fun gradientColors(goalReached: Boolean) = if (goalReached) {
+        intArrayOf(GOLD, GOLD_LIGHT, GOLD_DEEP)
+    } else {
+        intArrayOf(ACCENT_START, ACCENT_MID, ACCENT_END)
+    }
+
+    private fun drawFillHorizontal(
         canvas: Canvas,
         bounds: RectF,
         cornerRadiusPx: Float,
@@ -88,17 +102,12 @@ object FillRenderer {
         canvas.save()
         canvas.clipRect(bounds.left, bounds.top, bounds.left + fillWidth, bounds.bottom)
 
-        val colors = if (goalReached) {
-            intArrayOf(GOLD, GOLD_LIGHT, GOLD_DEEP)
-        } else {
-            intArrayOf(ACCENT_START, ACCENT_MID, ACCENT_END)
-        }
         val shader = LinearGradient(
             bounds.left,
             0f,
             bounds.right,
             0f,
-            colors,
+            gradientColors(goalReached),
             null,
             Shader.TileMode.CLAMP,
         )
@@ -106,8 +115,8 @@ object FillRenderer {
         canvas.drawRoundRect(bounds, cornerRadiusPx, cornerRadiusPx, fillPaint)
 
         // Feather the wipe's leading edge back to black rather than cutting it
-        // off with a hard vertical line — the area beyond is already BASE
-        // from the first draw, so this just blends into it.
+        // off with a hard line — the area beyond is already BASE from the
+        // first draw, so this just blends into it.
         if (fraction < 1f) {
             val edgeWidth = (bounds.width() * EDGE_SOFTNESS_FRACTION).coerceAtMost(fillWidth)
             val edgeShader = LinearGradient(
@@ -125,6 +134,59 @@ object FillRenderer {
                 bounds.top,
                 bounds.left + fillWidth,
                 bounds.bottom,
+                edgePaint,
+            )
+        }
+
+        canvas.restore()
+    }
+
+    private fun drawFillVertical(
+        canvas: Canvas,
+        bounds: RectF,
+        cornerRadiusPx: Float,
+        fraction: Float,
+        goalReached: Boolean,
+    ) {
+        val fillHeight = bounds.height() * fraction
+        val fillTop = bounds.bottom - fillHeight
+
+        canvas.save()
+        canvas.clipRect(bounds.left, fillTop, bounds.right, bounds.bottom)
+
+        // Bottom-to-top: the gradient's first colour anchors the bottom edge,
+        // where the fill originates, same as the horizontal wipe anchors its
+        // first colour at the edge the fill grows from.
+        val shader = LinearGradient(
+            0f,
+            bounds.bottom,
+            0f,
+            bounds.top,
+            gradientColors(goalReached),
+            null,
+            Shader.TileMode.CLAMP,
+        )
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+        canvas.drawRoundRect(bounds, cornerRadiusPx, cornerRadiusPx, fillPaint)
+
+        // Feather the wipe's leading (top) edge back to black.
+        if (fraction < 1f) {
+            val edgeHeight = (bounds.height() * EDGE_SOFTNESS_FRACTION).coerceAtMost(fillHeight)
+            val edgeShader = LinearGradient(
+                0f,
+                fillTop,
+                0f,
+                fillTop + edgeHeight,
+                BASE,
+                Color.TRANSPARENT,
+                Shader.TileMode.CLAMP,
+            )
+            val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = edgeShader }
+            canvas.drawRect(
+                bounds.left,
+                fillTop,
+                bounds.right,
+                fillTop + edgeHeight,
                 edgePaint,
             )
         }

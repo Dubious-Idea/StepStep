@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Horizontal 2x1 widget. The whole background is the fill bitmap from
      FillRenderer — no separate card drawable — since the point of this
-     variant is that the background itself is the progress indicator.
-     Text carries a shadow so it stays legible from solid black through to
-     the brightest part of the gradient. -->
+     variant is that the background itself is the progress indicator. Every
+     text view carries a symmetric (dx=0, dy=0) shadow, which reads as a
+     soft dark halo rather than a directional drop shadow — that is what
+     keeps light text legible from solid black through to the brightest
+     part of the gradient. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_bar_root"
@@ -36,7 +38,7 @@
             android:maxLines="1"
             android:shadowColor="@color/brand_background"
             android:shadowDx="0"
-            android:shadowDy="1"
+            android:shadowDy="0"
             android:shadowRadius="6"
             android:textColor="@color/brand_text_primary"
             android:textSize="30sp"
@@ -50,7 +52,7 @@
             android:letterSpacing="0.14"
             android:shadowColor="@color/brand_background"
             android:shadowDx="0"
-            android:shadowDy="1"
+            android:shadowDy="0"
             android:shadowRadius="4"
             android:text="@string/widget_steps_today"
             android:textAllCaps="true"

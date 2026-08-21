@@ -10,7 +10,6 @@
     <string name="widget_steps_today">Шагов сегодня</string>
     <string name="unit_kcal">ккал</string>
     <string name="label_distance">дистанция</string>
-    <string name="label_calories">калории</string>
     <string name="label_of_goal">от цели</string>
     <!-- Layout defaults, shown only in the widget picker preview. -->
     <string name="widget_goal_default">Цель 10 000</string>

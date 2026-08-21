@@ -66,6 +66,7 @@ class StepWidgetProviderGrid : AppWidgetProvider() {
                 cornerRadiusPx = context.resources.getDimension(R.dimen.widget_corner_radius),
                 progress = snapshot.progress,
                 goalReached = goalReached,
+                vertical = true,
             )
 
             val openApp = PendingIntent.getActivity(
@@ -85,10 +86,7 @@ class StepWidgetProviderGrid : AppWidgetProvider() {
                     if (goalReached) "Цель выполнена"
                     else "Цель ${Metrics.formatSteps(snapshot.goal)}",
                 )
-                setTextViewText(
-                    R.id.widget_grid_kcal,
-                    "${snapshot.kcal.roundToInt()} ${context.getString(R.string.unit_kcal)}",
-                )
+                setTextViewText(R.id.widget_grid_kcal, "${snapshot.kcal.roundToInt()}")
                 setTextViewText(
                     R.id.widget_grid_distance,
                     Metrics.formatDistance(snapshot.distanceKm),
