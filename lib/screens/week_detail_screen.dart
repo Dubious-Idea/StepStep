@@ -11,9 +11,9 @@ import '../widgets/stat_card.dart';
 /// (a Monday) — reached either from the home screen's week card (today's
 /// week) or by picking a day in [MonthScreen] (that day's week).
 ///
-/// Loads its own data by date range rather than taking a pre-fetched list,
-/// so it works the same regardless of which screen opened it, and the user
-/// can page to any other week from here with the arrows in the app bar.
+/// Weeks page left/right through a [PageView] anchored on an arbitrarily
+/// large centre index, so both a swipe and the app bar arrows drive the same
+/// animated transition and neither end ever runs out of pages.
 class WeekDetailScreen extends StatefulWidget {
   const WeekDetailScreen({
     super.key,
@@ -21,7 +21,7 @@ class WeekDetailScreen extends StatefulWidget {
     required this.goal,
   });
 
-  /// Monday of the week to show.
+  /// Monday of the week to show first.
   final DateTime startDate;
   final int goal;
 
@@ -30,53 +30,54 @@ class WeekDetailScreen extends StatefulWidget {
 }
 
 class _WeekDetailScreenState extends State<WeekDetailScreen> {
-  static const StepBridge _bridge = StepBridge();
+  /// Large enough that no amount of swiping in either direction runs out —
+  /// at 7 days per page that is roughly 900 years of weeks each way.
+  static const int _centerPage = 50000;
 
-  late DateTime _startDate = widget.startDate;
-  List<DayEntry>? _days;
+  late final PageController _pageController = PageController(
+    initialPage: _centerPage,
+  );
+  int _currentPage = _centerPage;
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _days = null);
-    final days = await _bridge.historyRange(
-      start: _startDate,
-      end: _startDate.add(const Duration(days: 6)),
-    );
-    if (!mounted) return;
-    setState(() => _days = days);
-  }
+  DateTime _startDateForPage(int page) =>
+      widget.startDate.add(Duration(days: 7 * (page - _centerPage)));
 
   void _shiftWeek(int deltaWeeks) {
-    _startDate = _startDate.add(Duration(days: 7 * deltaWeeks));
-    _load();
+    _pageController.animateToPage(
+      _currentPage + deltaWeeks,
+      duration: AppDuration.normal,
+      curve: AppCurves.outExpo,
+    );
   }
 
-  String get _rangeLabel {
-    final end = _startDate.add(const Duration(days: 6));
-    final startMonth = monthNamesGenitive[_startDate.month - 1];
-    if (_startDate.month == end.month && _startDate.year == end.year) {
-      return '${_startDate.day}–${end.day} $startMonth ${end.year}';
+  String _rangeLabelFor(DateTime startDate) {
+    final end = startDate.add(const Duration(days: 6));
+    final startMonth = monthNamesGenitive[startDate.month - 1];
+    if (startDate.month == end.month && startDate.year == end.year) {
+      return '${startDate.day}–${end.day} $startMonth ${end.year}';
     }
     final endMonth = monthNamesGenitive[end.month - 1];
-    if (_startDate.year == end.year) {
-      return '${_startDate.day} $startMonth – ${end.day} $endMonth ${end.year}';
+    if (startDate.year == end.year) {
+      return '${startDate.day} $startMonth – ${end.day} $endMonth ${end.year}';
     }
-    return '${_startDate.day} $startMonth ${_startDate.year} – '
+    return '${startDate.day} $startMonth ${startDate.year} – '
         '${end.day} $endMonth ${end.year}';
   }
 
   @override
-  Widget build(BuildContext context) {
-    final days = _days;
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_rangeLabel, style: AppText.title.copyWith(fontSize: 17)),
+        title: Text(
+          _rangeLabelFor(_startDateForPage(_currentPage)),
+          style: AppText.title.copyWith(fontSize: 17),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.chevron_left_rounded),
@@ -91,11 +92,59 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
         ],
       ),
       body: SafeArea(
-        child: days == null
-            ? const Center(child: CircularProgressIndicator())
-            : _WeekBody(days: days, goal: widget.goal),
+        child: PageView.builder(
+          controller: _pageController,
+          onPageChanged: (page) => setState(() => _currentPage = page),
+          itemBuilder: (context, page) => _WeekPage(
+            key: ValueKey(page),
+            startDate: _startDateForPage(page),
+            goal: widget.goal,
+          ),
+        ),
       ),
     );
+  }
+}
+
+/// One page's worth of data, loaded on demand — [PageView.builder] keeps a
+/// handful of neighbouring pages alive, so each fetches independently rather
+/// than the parent screen owning one big cache.
+class _WeekPage extends StatefulWidget {
+  const _WeekPage({super.key, required this.startDate, required this.goal});
+
+  final DateTime startDate;
+  final int goal;
+
+  @override
+  State<_WeekPage> createState() => _WeekPageState();
+}
+
+class _WeekPageState extends State<_WeekPage> {
+  static const StepBridge _bridge = StepBridge();
+
+  List<DayEntry>? _days;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final days = await _bridge.historyRange(
+      start: widget.startDate,
+      end: widget.startDate.add(const Duration(days: 6)),
+    );
+    if (!mounted) return;
+    setState(() => _days = days);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _days;
+    return days == null
+        ? const Center(child: CircularProgressIndicator())
+        : _WeekBody(days: days, goal: widget.goal);
   }
 }
 
