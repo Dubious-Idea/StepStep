@@ -72,6 +72,18 @@ class StepRepository(context: Context) {
         get() = prefs.getLong(KEY_LAST_AUTO_UPDATE_CHECK, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_AUTO_UPDATE_CHECK, value).apply()
 
+    /**
+     * How often [StepRefreshWorker] wakes the app to read the sensor and
+     * repaint the notification/widgets. Floored at [MIN_REFRESH_INTERVAL_MIN]
+     * — `PeriodicWorkRequest` itself refuses anything shorter, and there is no
+     * foreground service to fall back on for finer granularity by design.
+     */
+    var refreshIntervalMinutes: Int
+        get() = prefs.getInt(KEY_REFRESH_INTERVAL_MIN, DEFAULT_REFRESH_INTERVAL_MIN)
+        set(value) = prefs.edit()
+            .putInt(KEY_REFRESH_INTERVAL_MIN, value.coerceIn(MIN_REFRESH_INTERVAL_MIN, MAX_REFRESH_INTERVAL_MIN))
+            .apply()
+
     // ------------------------------------------------------------ today state
 
     val todayKey: String get() = dayKey(System.currentTimeMillis())
@@ -323,6 +335,12 @@ class StepRepository(context: Context) {
         private const val KEY_SKIPPED_VERSION = "update_skipped_version"
         private const val KEY_AUTO_UPDATE_CHECK = "update_auto_check_enabled"
         private const val KEY_LAST_AUTO_UPDATE_CHECK = "update_last_auto_check_millis"
+        private const val KEY_REFRESH_INTERVAL_MIN = "refresh_interval_minutes"
+
+        const val DEFAULT_REFRESH_INTERVAL_MIN = 30
+        /** `PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS` — the platform floor. */
+        const val MIN_REFRESH_INTERVAL_MIN = 15
+        const val MAX_REFRESH_INTERVAL_MIN = 24 * 60
         private const val KEY_LAST_RAW = "sensor_last_raw"
         private const val KEY_LAST_ACTIVE_MINUTE = "sensor_last_active_minute"
         private const val KEY_LAST_EVENT_MILLIS = "sensor_last_event_millis"

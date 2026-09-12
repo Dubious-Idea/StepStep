@@ -12,9 +12,9 @@ import kotlin.math.roundToInt
 /**
  * Home-screen widget showing the same neon ring as the notification.
  *
- * It renders straight from [StepRepository], so it stays correct even when
- * [StepService] has been killed — it just stops refreshing until the service
- * or the periodic update brings it back.
+ * It renders straight from [StepRepository], so it stays correct even
+ * between scheduled reads — it just shows whatever [StepRefreshWorker] last
+ * wrote until the next one runs.
  */
 class StepWidgetProvider : AppWidgetProvider() {
 
@@ -28,7 +28,7 @@ class StepWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         // First widget placed — make sure something is keeping it fresh.
-        if (StepRepository(context).isOnboarded) StepService.start(context)
+        if (StepRepository(context).isOnboarded) RefreshScheduler.ensureScheduled(context)
     }
 
     companion object {

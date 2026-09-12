@@ -30,6 +30,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        StepNotifier.createChannel(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler(::handle)
@@ -37,14 +38,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        // The service can be gone for reasons the app never hears about: the
-        // system reclaimed it, the package was replaced, the user force-stopped
-        // it. Opening the app is the one moment we know we can put it back, so
-        // this is what keeps the lock-screen notification from silently
-        // disappearing until the next reboot. Starting an already-running
-        // service is a no-op beyond an extra onStartCommand.
-        if (repository.isOnboarded && repository.isLiveNotificationEnabled) {
-            StepService.start(this)
+        // The schedule can be gone for reasons the app never hears about: the
+        // system reclaimed the alarm, the package was replaced. Opening the
+        // app is the one moment we know we can put it back. Re-arming an
+        // already-armed schedule is a no-op beyond replacing it with itself.
+        if (repository.isOnboarded) {
+            RefreshScheduler.ensureScheduled(this)
         }
     }
 
@@ -54,10 +53,11 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         if (permissions.onRequestPermissionsResult(requestCode)) {
-            // Newly granted activity recognition means the service can finally
-            // start, so bring it up without waiting for another user action.
-            if (repository.isOnboarded && repository.isLiveNotificationEnabled) {
-                StepService.start(this)
+            // Newly granted activity recognition means the schedule can
+            // finally do something useful, so arm it without waiting for
+            // another user action.
+            if (repository.isOnboarded) {
+                RefreshScheduler.ensureScheduled(this)
             }
             return
         }
@@ -95,8 +95,8 @@ class MainActivity : FlutterActivity() {
                 repository.isOnboarded = true
                 // Both outside surfaces show calories, so they go stale the
                 // moment weight or height changes.
-                Widgets.updateAll(this)
-                if (repository.isLiveNotificationEnabled) StepService.start(this)
+                refreshDisplays()
+                RefreshScheduler.ensureScheduled(this)
                 result.success(repository.snapshot().toMap())
             }
 
@@ -155,22 +155,44 @@ class MainActivity : FlutterActivity() {
             "setLiveNotificationEnabled" -> {
                 val enabled = call.argument<Boolean>("enabled") ?: true
                 repository.isLiveNotificationEnabled = enabled
-                if (enabled) StepService.start(this) else StepService.stop(this)
+                if (enabled) {
+                    StepNotifier.post(this, repository.snapshot())
+                } else {
+                    StepNotifier.cancel(this)
+                }
                 result.success(enabled)
             }
 
             "startTracking" -> {
                 repository.isOnboarded = true
-                if (repository.isLiveNotificationEnabled) StepService.start(this)
+                RefreshScheduler.ensureScheduled(this)
+                RefreshScheduler.refreshNow(this)
                 result.success(null)
             }
 
+            "refreshIntervalMinutes" -> result.success(repository.refreshIntervalMinutes)
+
+            "setRefreshIntervalMinutes" -> {
+                val minutes = call.argument<Int>("minutes") ?: StepRepository.DEFAULT_REFRESH_INTERVAL_MIN
+                repository.refreshIntervalMinutes = minutes
+                RefreshScheduler.schedulePeriodic(this, repository.refreshIntervalMinutes)
+                result.success(repository.refreshIntervalMinutes)
+            }
+
             // Pulls the hardware counter directly so a freshly opened app shows
-            // steps taken while the service was killed, without waiting for the
-            // service to spin up and report.
+            // steps taken since the last scheduled read, without waiting for
+            // the next one.
             "refreshFromSensor" -> readSensorOnce(result)
 
             else -> result.notImplemented()
+        }
+    }
+
+    /** Repaints the widgets and, if enabled, the ongoing notification. */
+    private fun refreshDisplays() {
+        Widgets.updateAll(this)
+        if (repository.isLiveNotificationEnabled) {
+            StepNotifier.post(this, repository.snapshot())
         }
     }
 
@@ -220,7 +242,7 @@ class MainActivity : FlutterActivity() {
                 event.values.firstOrNull()?.let {
                     repository.recordRawCounter(it.toLong())
                 }
-                Widgets.updateAll(this@MainActivity)
+                refreshDisplays()
                 result.success(repository.snapshot().toMap())
             }
 

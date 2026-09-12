@@ -6,11 +6,12 @@
     <!-- Runtime permission on Android 13+; without it the lock-screen
          notification is created but never shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Android 14+ requires the type-specific permission to match the
-         foregroundServiceType declared on the service below. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- For the 23:59 daily-finalisation alarm. On Android 12 it is granted
+         automatically; on 13+ the user must flip "Alarms & reminders" on for
+         the app in system settings, or RefreshScheduler quietly falls back to
+         an inexact (but still Doze-aware) alarm. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Update checks against the GitHub Releases API. The app sends nothing
          and stores nothing server-side; this is the only network it uses. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -49,12 +50,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Keeps the notification and the widget current while the app is
-             closed. Not exported: only this app ever starts it. -->
-        <service
-            android:name=".StepService"
-            android:exported="false"
-            android:foregroundServiceType="health" />
+        <!-- Fired by the exact alarm RefreshScheduler arms for 23:59, via an
+             explicit PendingIntent — no intent-filter needed, and not
+             exported since nothing outside this app ever targets it. -->
+        <receiver
+            android:name=".StepRefreshReceiver"
+            android:exported="false" />
 
         <!-- Widget providers must be exported so the launcher can bind them.
              Three separate receivers rather than one responsive layout: the
