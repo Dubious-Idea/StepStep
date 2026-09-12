@@ -44,16 +44,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isCheckingUpdate = false;
   bool _autoUpdateCheckEnabled = true;
 
+  int _refreshIntervalMinutes = kDefaultRefreshIntervalMinutes;
+  late final TextEditingController _hoursController = TextEditingController();
+  late final TextEditingController _minutesController = TextEditingController();
+  final FocusNode _hoursFocus = FocusNode();
+  final FocusNode _minutesFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
     _loadNotificationSetting();
     _loadAutoUpdateCheckSetting();
+    _loadRefreshInterval();
+    // Commit on blur rather than per keystroke — resyncing the controllers
+    // from the (possibly re-clamped) stored value while the user is still
+    // typing would fight the cursor.
+    _hoursFocus.addListener(() {
+      if (!_hoursFocus.hasFocus) _commitRefreshInterval();
+    });
+    _minutesFocus.addListener(() {
+      if (!_minutesFocus.hasFocus) _commitRefreshInterval();
+    });
   }
 
   @override
   void dispose() {
     _goalController.dispose();
+    _hoursController.dispose();
+    _minutesController.dispose();
+    _hoursFocus.dispose();
+    _minutesFocus.dispose();
     super.dispose();
   }
 
@@ -83,6 +103,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _autoUpdateCheckEnabled = enabled);
     const checker = UpdateChecker();
     await checker.setAutoCheckEnabled(enabled);
+  }
+
+  Future<void> _loadRefreshInterval() async {
+    final minutes = await _bridge.refreshIntervalMinutes();
+    if (!mounted) return;
+    setState(() => _refreshIntervalMinutes = minutes);
+    _hoursController.text = '${minutes ~/ 60}';
+    _minutesController.text = '${minutes % 60}';
+  }
+
+  /// Reads both fields, clamps the total, and persists it — called once
+  /// editing actually finishes (blur or "done"), not per keystroke. The
+  /// native side re-clamps too (`PeriodicWorkRequest` refuses anything under
+  /// 15 minutes outright), so the fields are re-synced from whatever it
+  /// actually stored rather than trusting what was typed.
+  Future<void> _commitRefreshInterval() async {
+    final hours = int.tryParse(_hoursController.text) ?? 0;
+    final minutes = int.tryParse(_minutesController.text) ?? 0;
+    final total = (hours * 60 + minutes).clamp(
+      kMinRefreshIntervalMinutes,
+      kMaxRefreshIntervalMinutes,
+    );
+
+    if (total == _refreshIntervalMinutes) {
+      // Nothing actually changed — still re-sync the text in case the user
+      // left a field blank or otherwise inconsistent with the stored total.
+      _hoursController.text = '${total ~/ 60}';
+      _minutesController.text = '${total % 60}';
+      return;
+    }
+
+    final stored = await _bridge.setRefreshIntervalMinutes(total);
+    if (!mounted) return;
+    setState(() => _refreshIntervalMinutes = stored);
+    _hoursController.text = '${stored ~/ 60}';
+    _minutesController.text = '${stored % 60}';
   }
 
   bool get _hasChanges =>
@@ -213,6 +269,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onChanged: _toggleNotification,
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  Text('АВТООБНОВЛЕНИЕ ДАННЫХ', style: AppText.label),
+                  const SizedBox(height: AppSpacing.md),
+                  _RefreshIntervalInput(
+                    hoursController: _hoursController,
+                    minutesController: _minutesController,
+                    hoursFocus: _hoursFocus,
+                    minutesFocus: _minutesFocus,
+                    onSubmitted: _commitRefreshInterval,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   _AutoUpdateCheckToggle(
                     value: _autoUpdateCheckEnabled,
                     onChanged: _toggleAutoUpdateCheck,
@@ -379,6 +445,115 @@ class _NotificationToggle extends StatelessWidget {
             inactiveThumbColor: AppColors.textMuted,
             inactiveTrackColor: AppColors.surfaceRaised,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// How often the background schedule wakes the app to read the sensor and
+/// repaint the notification/widgets, in hours + minutes — a free-form pair
+/// rather than a preset list, per the ask to pick an arbitrary cadence.
+/// There is deliberately no faster option: this app does not keep a process
+/// running between reads, and 15 minutes is the fastest the platform's
+/// background scheduler honours without one.
+class _RefreshIntervalInput extends StatelessWidget {
+  const _RefreshIntervalInput({
+    required this.hoursController,
+    required this.minutesController,
+    required this.hoursFocus,
+    required this.minutesFocus,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController hoursController;
+  final TextEditingController minutesController;
+  final FocusNode hoursFocus;
+  final FocusNode minutesFocus;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SurfaceCard(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.update_rounded,
+                color: AppColors.accentMid,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              _IntervalField(
+                controller: hoursController,
+                focusNode: hoursFocus,
+                unit: 'ч',
+                onSubmitted: onSubmitted,
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              _IntervalField(
+                controller: minutesController,
+                focusNode: minutesFocus,
+                unit: 'мин',
+                onSubmitted: onSubmitted,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Не чаще раза в 15 минут — приложение не остаётся в фоне между '
+          'обновлениями',
+          style: AppText.body.copyWith(
+            fontSize: 12,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IntervalField extends StatelessWidget {
+  const _IntervalField({
+    required this.controller,
+    required this.focusNode,
+    required this.unit,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String unit;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onSubmitted: (_) => onSubmitted(),
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.end,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+              style: AppText.statValue.copyWith(fontSize: 22),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(unit, style: AppText.body.copyWith(fontSize: 13)),
         ],
       ),
     );

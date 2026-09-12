@@ -4,6 +4,13 @@ import '../models/day_stats.dart';
 import '../models/profile.dart';
 import 'calendar_math.dart';
 
+/// Floor `PeriodicWorkRequest` itself enforces natively — the UI clamps to
+/// this rather than letting the user pick something the platform will
+/// silently round up anyway.
+const int kMinRefreshIntervalMinutes = 15;
+const int kMaxRefreshIntervalMinutes = 24 * 60;
+const int kDefaultRefreshIntervalMinutes = 30;
+
 /// Typed client for the native step store (`MainActivity` on Android).
 ///
 /// Every call can fail if the platform side is unavailable, so each one
@@ -19,7 +26,7 @@ class StepBridge {
   Future<StepSnapshot> snapshot() => _snapshotCall('getSnapshot');
 
   /// Reads the hardware counter directly, so a freshly opened app already
-  /// includes steps taken while the service was not running.
+  /// includes steps taken since the last scheduled background read.
   Future<StepSnapshot> refreshFromSensor() =>
       _snapshotCall('refreshFromSensor');
 
@@ -83,7 +90,7 @@ class StepBridge {
     orElse: enabled,
   );
 
-  /// Marks onboarding complete and brings the live notification up.
+  /// Marks onboarding complete and arms the background refresh schedule.
   Future<void> startTracking() async {
     try {
       await _channel.invokeMethod<void>('startTracking');
@@ -91,6 +98,35 @@ class StepBridge {
       // Tracking is best-effort: the UI still works from stored data.
     } on MissingPluginException {
       // Running on a platform without the native side (tests, desktop).
+    }
+  }
+
+  /// How often the background schedule wakes the app to read the sensor and
+  /// repaint the notification/widgets — see `RefreshScheduler` natively.
+  Future<int> refreshIntervalMinutes() async {
+    try {
+      return await _channel.invokeMethod<int>('refreshIntervalMinutes') ??
+          kDefaultRefreshIntervalMinutes;
+    } on PlatformException {
+      return kDefaultRefreshIntervalMinutes;
+    } on MissingPluginException {
+      return kDefaultRefreshIntervalMinutes;
+    }
+  }
+
+  /// @return the interval actually stored, clamped natively to the platform
+  ///   floor — the caller should reflect this back rather than assume [minutes]
+  ///   stuck verbatim.
+  Future<int> setRefreshIntervalMinutes(int minutes) async {
+    try {
+      return await _channel.invokeMethod<int>('setRefreshIntervalMinutes', {
+            'minutes': minutes,
+          }) ??
+          minutes;
+    } on PlatformException {
+      return minutes;
+    } on MissingPluginException {
+      return minutes;
     }
   }
 
