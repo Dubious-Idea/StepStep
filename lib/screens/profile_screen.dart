@@ -27,7 +27,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with WidgetsBindingObserver {
   static const StepBridge _bridge = StepBridge();
   static const StepPermissions _permissions = StepPermissions();
 
@@ -43,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _goalValid = true;
   bool _isCheckingUpdate = false;
   bool _autoUpdateCheckEnabled = true;
+  bool _isIgnoringBatteryOptimizations = true;
 
   int _refreshIntervalMinutes = kDefaultRefreshIntervalMinutes;
   late final TextEditingController _hoursController = TextEditingController();
@@ -53,9 +55,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadNotificationSetting();
     _loadAutoUpdateCheckSetting();
     _loadRefreshInterval();
+    _loadBatteryOptimizationStatus();
     // Commit on blur rather than per keystroke — resyncing the controllers
     // from the (possibly re-clamped) stored value while the user is still
     // typing would fight the cursor.
@@ -69,12 +73,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _goalController.dispose();
     _hoursController.dispose();
     _minutesController.dispose();
     _hoursFocus.dispose();
     _minutesFocus.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The battery-optimization dialog is a separate system screen — this is
+    // the only way to notice the user granted (or dismissed) it.
+    if (state == AppLifecycleState.resumed) {
+      _loadBatteryOptimizationStatus();
+    }
+  }
+
+  Future<void> _loadBatteryOptimizationStatus() async {
+    final ignoring = await _permissions.isIgnoringBatteryOptimizations();
+    if (mounted) setState(() => _isIgnoringBatteryOptimizations = ignoring);
+  }
+
+  Future<void> _requestBatteryOptimizationExemption() async {
+    await _permissions.requestIgnoreBatteryOptimizations();
   }
 
   void _onGoalChanged(String text) {
@@ -277,6 +300,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     hoursFocus: _hoursFocus,
                     minutesFocus: _minutesFocus,
                     onSubmitted: _commitRefreshInterval,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _BatteryOptimizationRow(
+                    isIgnoring: _isIgnoringBatteryOptimizations,
+                    onTap: _isIgnoringBatteryOptimizations
+                        ? null
+                        : _requestBatteryOptimizationExemption,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   _AutoUpdateCheckToggle(
@@ -554,6 +584,70 @@ class _IntervalField extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(unit, style: AppText.body.copyWith(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Nudges the user toward the system's own "unrestricted battery usage"
+/// dialog — without it, Doze and OEM battery managers can defer the periodic
+/// refresh well past whatever interval is set above. There is no in-app
+/// toggle: this only ever launches the system screen, and the answer comes
+/// back through [ProfileScreen] noticing the app resumed.
+class _BatteryOptimizationRow extends StatelessWidget {
+  const _BatteryOptimizationRow({
+    required this.isIgnoring,
+    required this.onTap,
+  });
+
+  final bool isIgnoring;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            isIgnoring
+                ? Icons.battery_charging_full_rounded
+                : Icons.battery_alert_rounded,
+            color: isIgnoring ? AppColors.accentMid : AppColors.calories,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Работа в фоне без ограничений',
+                  style: AppText.title.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isIgnoring
+                      ? 'Разрешено — система не должна откладывать обновления'
+                      : 'Иначе система может откладывать фоновое обновление',
+                  style: AppText.body.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (isIgnoring)
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 18,
+              color: AppColors.accentMid,
+            )
+          else
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textMuted,
+            ),
         ],
       ),
     );

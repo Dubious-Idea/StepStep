@@ -57,6 +57,35 @@ class StepPermissions {
     }
   }
 
+  /// Whether the system currently lets this app run unrestricted in the
+  /// background — without it, Doze/OEM battery management can defer the
+  /// periodic refresh well past the interval chosen in settings.
+  Future<bool> isIgnoringBatteryOptimizations() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'isIgnoringBatteryOptimizations',
+          ) ??
+          true;
+    } on PlatformException {
+      return true;
+    } on MissingPluginException {
+      return true;
+    }
+  }
+
+  /// Shows the system's "allow unrestricted battery usage" dialog for this
+  /// app. No result comes back from this call — the caller re-checks
+  /// [isIgnoringBatteryOptimizations] once the app resumes.
+  Future<void> requestIgnoreBatteryOptimizations() async {
+    try {
+      await _channel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
+    } on PlatformException {
+      // Nothing else to offer if the system dialog will not open.
+    } on MissingPluginException {
+      // Not running on a platform with the native side.
+    }
+  }
+
   Future<PermissionOutcome> _outcomeCall(String method) async {
     try {
       final raw = await _channel.invokeMapMethod<String, dynamic>(method);

@@ -8,6 +8,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -82,6 +83,33 @@ class PermissionCoordinator(private val activity: Activity) {
                 Uri.fromParts("package", activity.packageName, null),
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    /**
+     * Whether the system currently lets this app run unrestricted in the
+     * background — without it, Doze and OEM battery managers can defer
+     * [RefreshScheduler]'s periodic work well past the interval the user chose.
+     */
+    fun isIgnoringBatteryOptimizations(): Boolean {
+        val powerManager = activity.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return powerManager.isIgnoringBatteryOptimizations(activity.packageName)
+    }
+
+    /**
+     * Shows the system's own "allow unrestricted battery usage" dialog for
+     * this app. There is no result callback — [MainActivity.onResume] is
+     * what notices the change when the user comes back.
+     */
+    fun requestIgnoreBatteryOptimizations() {
+        if (isIgnoringBatteryOptimizations()) return
+        runCatching {
+            activity.startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:${activity.packageName}"),
+                ),
+            )
+        }
     }
 
     private fun isGranted(permission: String): Boolean =

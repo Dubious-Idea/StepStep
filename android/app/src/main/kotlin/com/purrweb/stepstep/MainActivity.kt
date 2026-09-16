@@ -147,6 +147,14 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
             }
 
+            "isIgnoringBatteryOptimizations" ->
+                result.success(permissions.isIgnoringBatteryOptimizations())
+
+            "requestIgnoreBatteryOptimizations" -> {
+                permissions.requestIgnoreBatteryOptimizations()
+                result.success(null)
+            }
+
             "hasStepSensor" -> result.success(hasStepSensor())
 
             "isLiveNotificationEnabled" ->

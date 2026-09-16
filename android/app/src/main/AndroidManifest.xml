@@ -12,6 +12,11 @@
          the app in system settings, or RefreshScheduler quietly falls back to
          an inexact (but still Doze-aware) alarm. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Lets the profile screen offer the system's "ignore battery
+         optimizations" prompt, so PeriodicWorkRequest is less likely to be
+         deferred by Doze or an OEM battery manager. Only used to show that
+         one dialog — never granted silently. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Update checks against the GitHub Releases API. The app sends nothing
          and stores nothing server-side; this is the only network it uses. -->
     <uses-permission android:name="android.permission.INTERNET" />
