@@ -29,7 +29,7 @@ class PermissionCoordinator(private val activity: Activity) {
     private var pending: ((Map<String, Any>) -> Unit)? = null
 
     fun status(): Map<String, Any> {
-        val activityGranted = isGranted(Manifest.permission.ACTIVITY_RECOGNITION)
+        val activityGranted = canCountSteps(activity)
         return mapOf(
             "canCountSteps" to activityGranted,
             "canShowNotification" to isGranted(notificationPermission),
@@ -47,9 +47,7 @@ class PermissionCoordinator(private val activity: Activity) {
      */
     fun request(onResult: (Map<String, Any>) -> Unit) {
         val missing = buildList {
-            if (!isGranted(Manifest.permission.ACTIVITY_RECOGNITION)) {
-                add(Manifest.permission.ACTIVITY_RECOGNITION)
-            }
+            if (!canCountSteps(activity)) add(Manifest.permission.ACTIVITY_RECOGNITION)
             if (!isGranted(notificationPermission)) add(notificationPermission)
         }
 
@@ -87,8 +85,9 @@ class PermissionCoordinator(private val activity: Activity) {
 
     /**
      * Whether the system currently lets this app run unrestricted in the
-     * background — without it, Doze and OEM battery managers can defer
-     * [RefreshScheduler]'s periodic work well past the interval the user chose.
+     * background. It also exempts the app from the limits on starting a
+     * foreground service from the background, so [StepTrackingService] can
+     * come back on its own after the system stops it.
      */
     fun isIgnoringBatteryOptimizations(): Boolean {
         val powerManager = activity.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -143,9 +142,22 @@ class PermissionCoordinator(private val activity: Activity) {
             Manifest.permission.FOREGROUND_SERVICE
         }
 
-    private companion object {
-        const val REQUEST_CODE = 4711
-        const val PREFS_NAME = StepRepository.PREFS_NAME
-        const val KEY_HAS_ASKED = "permission_has_asked"
+    companion object {
+        private const val REQUEST_CODE = 4711
+        private const val PREFS_NAME = StepRepository.PREFS_NAME
+        private const val KEY_HAS_ASKED = "permission_has_asked"
+
+        /**
+         * Whether the step counter may be read — and, on Android 14+, whether
+         * a `health` foreground service may start at all. Before Android 10
+         * the counter needed no runtime permission, and probing one the
+         * platform does not define yet always reports denied.
+         */
+        fun canCountSteps(context: Context): Boolean =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACTIVITY_RECOGNITION,
+                ) == PackageManager.PERMISSION_GRANTED
     }
 }

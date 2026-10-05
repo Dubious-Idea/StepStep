@@ -4,13 +4,6 @@ import '../models/day_stats.dart';
 import '../models/profile.dart';
 import 'calendar_math.dart';
 
-/// Floor `PeriodicWorkRequest` itself enforces natively — the UI clamps to
-/// this rather than letting the user pick something the platform will
-/// silently round up anyway.
-const int kMinRefreshIntervalMinutes = 15;
-const int kMaxRefreshIntervalMinutes = 24 * 60;
-const int kDefaultRefreshIntervalMinutes = 30;
-
 /// Typed client for the native step store (`MainActivity` on Android).
 ///
 /// Every call can fail if the platform side is unavailable, so each one
@@ -23,12 +16,35 @@ class StepBridge {
     'com.purrweb.stepstep/steps',
   );
 
+  static const EventChannel _live = EventChannel('com.purrweb.stepstep/live');
+
   Future<StepSnapshot> snapshot() => _snapshotCall('getSnapshot');
 
-  /// Reads the hardware counter directly, so a freshly opened app already
-  /// includes steps taken since the last scheduled background read.
+  /// Flushes the hardware counter first, so a freshly opened app shows steps
+  /// up to this moment rather than up to the last batch the native counter
+  /// happened to receive.
   Future<StepSnapshot> refreshFromSensor() =>
       _snapshotCall('refreshFromSensor');
+
+  /// Fresh snapshots pushed by the native counter while the app is open —
+  /// one per batch of steps it folds in, so the ring grows during a walk
+  /// instead of only when the app comes back to the foreground.
+  Stream<StepSnapshot> liveSnapshots() => _live
+      .receiveBroadcastStream()
+      .where((event) => event is Map)
+      .map((event) => StepSnapshot.fromMap(event as Map<dynamic, dynamic>));
+
+  /// `Build.MANUFACTURER`, e.g. to show the HyperOS-only autostart hint.
+  /// Empty when the native side is unavailable.
+  Future<String> deviceManufacturer() async {
+    try {
+      return await _channel.invokeMethod<String>('deviceManufacturer') ?? '';
+    } on PlatformException {
+      return '';
+    } on MissingPluginException {
+      return '';
+    }
+  }
 
   Future<StepSnapshot> saveProfile(Profile profile) =>
       _snapshotCall('saveProfile', <String, dynamic>{
@@ -90,7 +106,7 @@ class StepBridge {
     orElse: enabled,
   );
 
-  /// Marks onboarding complete and arms the background refresh schedule.
+  /// Marks onboarding complete and starts the native step counter.
   Future<void> startTracking() async {
     try {
       await _channel.invokeMethod<void>('startTracking');
@@ -98,35 +114,6 @@ class StepBridge {
       // Tracking is best-effort: the UI still works from stored data.
     } on MissingPluginException {
       // Running on a platform without the native side (tests, desktop).
-    }
-  }
-
-  /// How often the background schedule wakes the app to read the sensor and
-  /// repaint the notification/widgets — see `RefreshScheduler` natively.
-  Future<int> refreshIntervalMinutes() async {
-    try {
-      return await _channel.invokeMethod<int>('refreshIntervalMinutes') ??
-          kDefaultRefreshIntervalMinutes;
-    } on PlatformException {
-      return kDefaultRefreshIntervalMinutes;
-    } on MissingPluginException {
-      return kDefaultRefreshIntervalMinutes;
-    }
-  }
-
-  /// @return the interval actually stored, clamped natively to the platform
-  ///   floor — the caller should reflect this back rather than assume [minutes]
-  ///   stuck verbatim.
-  Future<int> setRefreshIntervalMinutes(int minutes) async {
-    try {
-      return await _channel.invokeMethod<int>('setRefreshIntervalMinutes', {
-            'minutes': minutes,
-          }) ??
-          minutes;
-    } on PlatformException {
-      return minutes;
-    } on MissingPluginException {
-      return minutes;
     }
   }
 

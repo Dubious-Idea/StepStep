@@ -5,14 +5,15 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Re-arms the two refresh schedules after a reboot.
+ * Restarts the counter and re-arms the daily alarm after a reboot or an app
+ * update. Both broadcasts are exempt from the background limits on starting
+ * a foreground service, and Android 15's restriction on doing so from
+ * `BOOT_COMPLETED` does not cover the `health` type.
  *
- * A reboot also resets the hardware step counter to zero;
- * [StepRepository.recordRawCounter] detects that as a backwards jump, so no
- * special handling is needed here beyond that. `AlarmManager` alarms in
- * particular do not survive a reboot on their own — the periodic
- * `PeriodicWorkRequest` does, via WorkManager's own boot receiver, but
- * re-enqueueing it here too is a harmless no-op and costs nothing to keep.
+ * A reboot also resets the hardware step counter to zero; [StepLedger]
+ * notices through the boot count, so nothing special is needed here.
+ * On HyperOS/MIUI this broadcast only arrives with "Autostart" allowed for
+ * the app — the profile screen points there.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

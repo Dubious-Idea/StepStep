@@ -2,12 +2,12 @@ package com.purrweb.stepstep
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.provider.Settings
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import kotlin.math.ceil
 
 /**
  * Single source of truth for step data.
@@ -17,14 +17,18 @@ import kotlin.math.ceil
  * itself — it converts the raw counter into per-day totals by accumulating
  * deltas, which survives both reboots (counter resets to 0) and long periods
  * with no listener registered (one large delta arrives at the next reading).
+ * The arithmetic itself lives in [StepLedger]; this class only loads and
+ * stores its state.
  *
  * Flutter reads through [MainActivity]'s method channel rather than keeping a
  * second copy, so the widget, the notification and the UI can never disagree.
  */
 class StepRepository(context: Context) {
 
+    private val appContext: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // ---------------------------------------------------------------- profile
 
@@ -54,10 +58,28 @@ class StepRepository(context: Context) {
         get() = prefs.getString(KEY_SKIPPED_VERSION, null)
         set(value) = prefs.edit().putString(KEY_SKIPPED_VERSION, value).apply()
 
-    /** Whether the ongoing lock-screen notification should be running. */
+    /**
+     * Whether the foreground notification is the full lock-screen one with
+     * the ring. Off does not stop counting — the service still needs *a*
+     * notification — it switches to the collapsed one on the quiet channel.
+     */
     var isLiveNotificationEnabled: Boolean
         get() = prefs.getBoolean(KEY_LIVE_NOTIFICATION, true)
         set(value) = prefs.edit().putBoolean(KEY_LIVE_NOTIFICATION, value).apply()
+
+    /**
+     * Set when the user swipes the notification away (allowed for foreground
+     * services since Android 13). Until the app is opened again the service
+     * stops re-posting it, instead of bringing it back on every screen-on.
+     */
+    var isNotificationDismissed: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_DISMISSED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_DISMISSED, value).apply()
+
+    /** True once the WorkManager job left over from 1.4.x has been cancelled. */
+    var isLegacyWorkCleared: Boolean
+        get() = prefs.getBoolean(KEY_LEGACY_WORK_CLEARED, false)
+        set(value) = prefs.edit().putBoolean(KEY_LEGACY_WORK_CLEARED, value).apply()
 
     /** Whether the app should check GitHub for a new release on launch. */
     var isAutoUpdateCheckEnabled: Boolean
@@ -72,18 +94,6 @@ class StepRepository(context: Context) {
         get() = prefs.getLong(KEY_LAST_AUTO_UPDATE_CHECK, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_AUTO_UPDATE_CHECK, value).apply()
 
-    /**
-     * How often [StepRefreshWorker] wakes the app to read the sensor and
-     * repaint the notification/widgets. Floored at [MIN_REFRESH_INTERVAL_MIN]
-     * — `PeriodicWorkRequest` itself refuses anything shorter, and there is no
-     * foreground service to fall back on for finer granularity by design.
-     */
-    var refreshIntervalMinutes: Int
-        get() = prefs.getInt(KEY_REFRESH_INTERVAL_MIN, DEFAULT_REFRESH_INTERVAL_MIN)
-        set(value) = prefs.edit()
-            .putInt(KEY_REFRESH_INTERVAL_MIN, value.coerceIn(MIN_REFRESH_INTERVAL_MIN, MAX_REFRESH_INTERVAL_MIN))
-            .apply()
-
     // ------------------------------------------------------------ today state
 
     val todayKey: String get() = dayKey(System.currentTimeMillis())
@@ -97,99 +107,82 @@ class StepRepository(context: Context) {
     val todayActiveMinutes: Int get() = activeMinutesOn(todayKey)
 
     /**
-     * Folds a raw `TYPE_STEP_COUNTER` reading into today's total.
+     * Folds one raw `TYPE_STEP_COUNTER` reading, taken at [atMillis], into
+     * the totals.
      *
      * @return the new total for today.
      */
-    @Synchronized
-    fun recordRawCounter(raw: Long, nowMillis: Long = System.currentTimeMillis()): Int {
-        val lastRaw = prefs.getLong(KEY_LAST_RAW, NO_RAW)
+    fun recordRawCounter(raw: Long, atMillis: Long = System.currentTimeMillis()): Int =
+        recordReadings(listOf(StepLedger.Reading(raw, atMillis)))
 
-        val delta = when {
-            // First reading ever: we have no baseline, so claim nothing.
-            lastRaw == NO_RAW -> 0L
-            // Counter went backwards => the device rebooted and restarted from
-            // zero. Everything it has counted since then is new to us.
-            raw < lastRaw -> raw
-            else -> raw - lastRaw
-        }
-
-        prefs.edit().putLong(KEY_LAST_RAW, raw).apply()
-
-        // A jump this large is a corrupt reading, not a person walking.
-        if (delta <= 0 || delta > MAX_PLAUSIBLE_DELTA) return todaySteps
-
-        return addSteps(delta.toInt(), nowMillis)
+    /**
+     * Folds a batch of readings (oldest first) in one transaction — a sensor
+     * batch can hold hundreds of events, and committing each one separately
+     * would copy the whole preference map hundreds of times.
+     *
+     * Synchronized across instances, not just this one: the service thread
+     * and the activity each build their own repository.
+     *
+     * @return the new total for today.
+     */
+    fun recordReadings(
+        readings: List<StepLedger.Reading>,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Int {
+        if (readings.isEmpty()) return todaySteps
+        synchronized(LOCK) { fold(readings, nowMillis) }
+        return todaySteps
     }
 
-    @Synchronized
-    fun addSteps(delta: Int, nowMillis: Long): Int {
-        if (delta <= 0) return todaySteps
+    private fun fold(readings: List<StepLedger.Reading>, nowMillis: Long) {
+        val result = StepLedger.apply(loadLedgerState(), readings, currentBootCount()) { dayKey(it) }
 
-        val day = dayKey(nowMillis)
-        val newTotal = prefs.getInt(stepsKey(day), 0) + delta
+        val editor = prefs.edit()
+        result.steps.forEach { (day, added) ->
+            editor.putInt(stepsKey(day), stepsOn(day) + added)
+        }
+        result.activeMinutes.forEach { (day, added) ->
+            editor.putInt(activeKey(day), activeMinutesOn(day) + added)
+        }
+        saveLedgerState(editor, result.state)
 
-        val editor = prefs.edit().putInt(stepsKey(day), newTotal)
-        creditActiveMinutes(editor, day, delta, nowMillis)
+        val today = dayKey(nowMillis)
+        val dayChanged = prefs.getString(KEY_CURRENT_DAY, null) != today
+        if (dayChanged) editor.putString(KEY_CURRENT_DAY, today)
         editor.apply()
 
-        if (prefs.getString(KEY_CURRENT_DAY, null) != day) {
-            prefs.edit().putString(KEY_CURRENT_DAY, day).apply()
-            pruneHistory(nowMillis)
-        }
-        return newTotal
+        if (dayChanged) pruneHistory(nowMillis)
+    }
+
+    private fun loadLedgerState() = StepLedger.State(
+        lastRaw = prefs.getLong(KEY_LAST_RAW, StepLedger.NO_RAW),
+        lastEventMillis = prefs.getLong(KEY_LAST_EVENT_MILLIS, StepLedger.NO_TIME),
+        bootCount = prefs.getInt(KEY_LAST_BOOT_COUNT, StepLedger.UNKNOWN_BOOT),
+        activeCarryMillis = prefs.getLong(KEY_ACTIVE_CARRY_MILLIS, 0L),
+        activeCarryDay = prefs.getString(KEY_ACTIVE_CARRY_DAY, null),
+    )
+
+    private fun saveLedgerState(editor: SharedPreferences.Editor, state: StepLedger.State) {
+        editor
+            .putLong(KEY_LAST_RAW, state.lastRaw)
+            .putLong(KEY_LAST_EVENT_MILLIS, state.lastEventMillis)
+            .putInt(KEY_LAST_BOOT_COUNT, state.bootCount)
+            .putLong(KEY_ACTIVE_CARRY_MILLIS, state.activeCarryMillis)
+            .putString(KEY_ACTIVE_CARRY_DAY, state.activeCarryDay)
     }
 
     /**
-     * Turns a step total into walking *time*, which the calorie model needs
-     * — see [Metrics.activeKcal].
-     *
-     * `TYPE_STEP_COUNTER` events are batched by the OS and can arrive minutes
-     * apart, each carrying every step taken since the last one. Crediting a
-     * flat one minute per callback (the previous behaviour) badly undercounts
-     * a burst delivered after the app sat quiet for a while, and just as
-     * badly overcounts a trickle of noise events spread one-per-minute.
-     * Instead this estimates how many of the minutes since the last reading
-     * were actually spent walking, from the step delta at a plausible
-     * cadence, then caps that estimate by how much wall-clock time really
-     * passed — so a reading can never claim more active time than elapsed,
-     * regardless of how sparsely events arrive. That cap is what makes this
-     * safe to run purely off whatever events the sensor happens to deliver,
-     * without needing a service kept alive to poll more often.
+     * Increments on every boot, which is exactly when the hardware counter
+     * restarts from zero — a sturdier reboot signal than "the counter went
+     * down", which a late-delivered batch can fake.
      */
-    private fun creditActiveMinutes(
-        editor: SharedPreferences.Editor,
-        day: String,
-        delta: Int,
-        nowMillis: Long,
-    ) {
-        val minuteStamp = nowMillis / 60_000L
-        val lastEventMillis = prefs.getLong(KEY_LAST_EVENT_MILLIS, -1L)
-        val lastCreditedMinute = prefs.getLong(KEY_LAST_ACTIVE_MINUTE, -1L)
-
-        val estimatedMinutes = ceil(delta / Metrics.FALLBACK_CADENCE_STEPS_PER_MIN)
-            .toLong()
-            .coerceAtLeast(1L)
-        val elapsedMinutes = if (lastEventMillis < 0) {
-            1L
-        } else {
-            ((nowMillis - lastEventMillis) / 60_000L).coerceAtLeast(1L)
-        }
-        val minutesToCredit = minOf(estimatedMinutes, elapsedMinutes)
-
-        // Minutes already credited by a previous call must not be counted
-        // again, so the credited range starts right after them.
-        val rangeStart = minuteStamp - minutesToCredit + 1
-        val creditFrom = maxOf(rangeStart, lastCreditedMinute + 1)
-
-        if (creditFrom <= minuteStamp) {
-            val newlyCredited = (minuteStamp - creditFrom + 1).toInt()
-            editor.putInt(activeKey(day), prefs.getInt(activeKey(day), 0) + newlyCredited)
-        }
-
-        editor.putLong(KEY_LAST_ACTIVE_MINUTE, minuteStamp)
-        editor.putLong(KEY_LAST_EVENT_MILLIS, nowMillis)
-    }
+    private fun currentBootCount(): Int = runCatching {
+        Settings.Global.getInt(
+            appContext.contentResolver,
+            Settings.Global.BOOT_COUNT,
+            StepLedger.UNKNOWN_BOOT,
+        )
+    }.getOrDefault(StepLedger.UNKNOWN_BOOT)
 
     // --------------------------------------------------------------- history
 
@@ -318,10 +311,8 @@ class StepRepository(context: Context) {
          * year" even right after the year rolls over. */
         const val HISTORY_DAYS = 400
 
-        private const val NO_RAW = -1L
-
-        /** ~7 hours of continuous fast walking; beyond this it is a bad read. */
-        private const val MAX_PLAUSIBLE_DELTA = 60_000L
+        /** Guards read-modify-write of the step totals across all instances. */
+        private val LOCK = Any()
 
         private const val DEFAULT_HEIGHT_CM = 175
         private const val DEFAULT_WEIGHT_KG = 70.0
@@ -332,18 +323,17 @@ class StepRepository(context: Context) {
         private const val KEY_GOAL = "profile_goal"
         private const val KEY_ONBOARDED = "profile_onboarded"
         private const val KEY_LIVE_NOTIFICATION = "profile_live_notification"
+        private const val KEY_NOTIFICATION_DISMISSED = "notification_dismissed"
+        private const val KEY_LEGACY_WORK_CLEARED = "legacy_work_cleared"
         private const val KEY_SKIPPED_VERSION = "update_skipped_version"
         private const val KEY_AUTO_UPDATE_CHECK = "update_auto_check_enabled"
         private const val KEY_LAST_AUTO_UPDATE_CHECK = "update_last_auto_check_millis"
-        private const val KEY_REFRESH_INTERVAL_MIN = "refresh_interval_minutes"
 
-        const val DEFAULT_REFRESH_INTERVAL_MIN = 30
-        /** `PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS` — the platform floor. */
-        const val MIN_REFRESH_INTERVAL_MIN = 15
-        const val MAX_REFRESH_INTERVAL_MIN = 24 * 60
         private const val KEY_LAST_RAW = "sensor_last_raw"
-        private const val KEY_LAST_ACTIVE_MINUTE = "sensor_last_active_minute"
         private const val KEY_LAST_EVENT_MILLIS = "sensor_last_event_millis"
+        private const val KEY_LAST_BOOT_COUNT = "sensor_last_boot_count"
+        private const val KEY_ACTIVE_CARRY_MILLIS = "sensor_active_carry_millis"
+        private const val KEY_ACTIVE_CARRY_DAY = "sensor_active_carry_day"
         private const val KEY_CURRENT_DAY = "sensor_current_day"
 
         private const val PREFIX_STEPS = "steps_"

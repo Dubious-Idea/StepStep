@@ -6,10 +6,9 @@
      phone the lock-screen presence comes from StepNotifier's notification
      instead. Declaring it costs nothing and lights up where supported.
 
-     updatePeriodMillis is only a floor: RefreshScheduler's periodic
-     StepRefreshWorker repaints the widget on the user's chosen interval, and
-     this is the fallback if that schedule ever lapses. 30 minutes is the
-     shortest interval the platform actually honours. -->
+     updatePeriodMillis is 0 on purpose: a periodic update wakes the device
+     even when nobody can see the widget. StepTrackingService repaints it
+     whenever the screen turns on, which is the only time it is visible. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"
     android:initialLayout="@layout/widget_steps"
@@ -22,5 +21,5 @@
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="2"
     android:targetCellWidth="4"
-    android:updatePeriodMillis="1800000"
+    android:updatePeriodMillis="0"
     android:widgetCategory="home_screen|keyguard" />
