@@ -75,9 +75,11 @@ jobs:
       # JVM tests for the native step bookkeeping (StepLedger). After the
       # build because that is what generates the gitignored Gradle wrapper;
       # before the upload so a red run never produces an installable APK.
+      # Debug variant: AGP 9 only creates unit-test tasks for the tested
+      # build type by default.
       - name: Kotlin unit tests
         working-directory: android
-        run: ./gradlew :app:testReleaseUnitTest --no-daemon
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
