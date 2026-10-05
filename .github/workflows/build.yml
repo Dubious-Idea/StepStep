@@ -72,6 +72,13 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
+      # JVM tests for the native step bookkeeping (StepLedger). After the
+      # build because that is what generates the gitignored Gradle wrapper;
+      # before the upload so a red run never produces an installable APK.
+      - name: Kotlin unit tests
+        working-directory: android
+        run: ./gradlew :app:testReleaseUnitTest --no-daemon
+
       - uses: actions/upload-artifact@v4
         with:
           name: stepstep-apk

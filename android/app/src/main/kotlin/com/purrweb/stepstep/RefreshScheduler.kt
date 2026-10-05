@@ -2,74 +2,40 @@ package com.purrweb.stepstep
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import java.util.Calendar
-import java.util.concurrent.TimeUnit
 
 /**
- * Arms and re-arms the two schedules that replace the always-on foreground
- * service: a periodic [StepRefreshWorker] run at the user's chosen interval
- * (kept fresh for the widgets and the notification), and an exact alarm at
- * 23:59 that finalises the day's total before midnight rolls it over into
- * "yesterday" — the same gap this whole scheme exists to close.
+ * Keeps [StepTrackingService] running and arms the one alarm it relies on:
+ * 23:59 every day, which finalises the day's total before midnight and
+ * restarts the service if the system or the ROM killed it in between.
  *
- * Neither schedule depends on the process staying alive in between: the
- * periodic one is a `PeriodicWorkRequest`, which the system persists and
- * redelivers on its own even across reboots, and the daily alarm is
- * re-armed by [StepRefreshReceiver] itself every time it fires (`AlarmManager`
- * alarms do not survive a reboot, which is why [BootReceiver] also calls
- * [ensureScheduled]).
+ * The alarm is exact. `USE_EXACT_ALARM` is granted at install and cannot be
+ * revoked, which is what makes this work without asking the user for
+ * anything: an inexact alarm may arrive up to an hour late, i.e. after
+ * midnight — exactly when it is useless. Google Play limits that permission
+ * to alarm and calendar apps, but this app ships through GitHub Releases;
+ * moving to Play would mean going back to `SCHEDULE_EXACT_ALARM` plus a
+ * screen asking the user to grant it.
  */
 object RefreshScheduler {
-    private const val PERIODIC_WORK_NAME = "step_refresh_periodic"
-    private const val DAILY_WORK_NAME = "step_refresh_daily"
     private const val DAILY_ALARM_REQUEST_CODE = 4712
 
     /** Hour/minute the daily finalisation runs at, in the device's local time. */
     private const val DAILY_HOUR = 23
     private const val DAILY_MINUTE = 59
 
-    /** Arms both schedules from the currently saved interval. Idempotent. */
+    /** Starts (or nudges) the counter and arms the daily alarm. Idempotent. */
     fun ensureScheduled(context: Context) {
-        schedulePeriodic(context, StepRepository(context).refreshIntervalMinutes)
+        clearLegacyWork(context)
         scheduleDailyAlarm(context)
+        StepTrackingService.start(context)
     }
 
-    /** Re-arms the periodic job with a new interval, replacing the old one. */
-    fun schedulePeriodic(context: Context, intervalMinutes: Int) {
-        val clamped = intervalMinutes.coerceIn(
-            StepRepository.MIN_REFRESH_INTERVAL_MIN,
-            StepRepository.MAX_REFRESH_INTERVAL_MIN,
-        )
-        val request = PeriodicWorkRequestBuilder<StepRefreshWorker>(
-            clamped.toLong(),
-            TimeUnit.MINUTES,
-        ).build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            PERIODIC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request,
-        )
-    }
-
-    /** Runs a refresh right away, e.g. right after onboarding or enabling the notification. */
-    fun refreshNow(context: Context) {
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "step_refresh_immediate",
-            ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<StepRefreshWorker>().build(),
-        )
-    }
-
-    /** Called by [StepRefreshReceiver] itself on each firing, and by [BootReceiver]. */
+    /** Called by [StepRefreshReceiver] itself on each firing, and on every [ensureScheduled]. */
     fun scheduleDailyAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = dailyAlarmIntent(context)
@@ -86,21 +52,25 @@ object RefreshScheduler {
                     pendingIntent,
                 )
             } else {
-                // No permission for exact alarms (Android 13+ until the user
-                // grants "Alarms & reminders") — still Doze-aware, just not
-                // guaranteed to the minute.
+                // Only reachable if the exact-alarm permission is somehow
+                // missing. Still Doze-aware, just not guaranteed to the minute.
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
             }
         }
     }
 
-    /** Runs the worker directly for the daily finalisation, bypassing the periodic queue. */
-    fun runDailyRefresh(context: Context) {
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            DAILY_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<StepRefreshWorker>().build(),
-        )
+    /**
+     * 1.4.x scheduled a periodic WorkManager job. The library is gone, but
+     * JobScheduler would keep the persisted job (and its wake-ups) across the
+     * update, so cancel it once. Nothing else in the app uses JobScheduler.
+     */
+    private fun clearLegacyWork(context: Context) {
+        val repository = StepRepository(context)
+        if (repository.isLegacyWorkCleared) return
+        runCatching {
+            (context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler).cancelAll()
+        }
+        repository.isLegacyWorkCleared = true
     }
 
     private fun nextDailyTriggerMillis(): Long {

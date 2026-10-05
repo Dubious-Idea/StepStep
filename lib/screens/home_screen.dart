@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/day_stats.dart';
@@ -35,11 +37,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hasSensor = true;
   bool _canCountSteps = true;
   bool _isLoading = true;
+  StreamSubscription<StepSnapshot>? _live;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _live = _bridge.liveSnapshots().listen(_onLiveSnapshot);
     _load();
     _checkForUpdate();
   }
@@ -80,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _live?.cancel();
     super.dispose();
   }
 
@@ -99,13 +104,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ]);
 
     if (!mounted) return;
+    final snapshot = results[0] as StepSnapshot;
     setState(() {
-      _snapshot = results[0] as StepSnapshot;
-      _week = results[1] as List<DayEntry>;
+      _snapshot = snapshot;
+      // History is read alongside the sensor flush, so today's bar can lag
+      // the ring by a batch — the snapshot is the fresher of the two.
+      _week = _withToday(results[1] as List<DayEntry>, snapshot);
       _hasSensor = results[2] as bool;
       _canCountSteps = (results[3] as PermissionOutcome).canCountSteps;
       _isLoading = false;
     });
+  }
+
+  /// Steps arriving while the app is open, pushed by the native counter.
+  void _onLiveSnapshot(StepSnapshot snapshot) {
+    if (!mounted || _isLoading) return;
+    if (_week.isNotEmpty && _week.last.dayKey != dayKeyOf(DateTime.now())) {
+      // Midnight passed with the app open: the whole week has shifted.
+      _load();
+      return;
+    }
+    setState(() {
+      _snapshot = snapshot;
+      _week = _withToday(_week, snapshot);
+    });
+  }
+
+  /// [week] with its last day — today — replaced by the live [snapshot].
+  List<DayEntry> _withToday(List<DayEntry> week, StepSnapshot snapshot) {
+    if (week.isEmpty || week.last.dayKey != dayKeyOf(DateTime.now())) {
+      return week;
+    }
+    final today = week.last;
+    return [
+      ...week.take(week.length - 1),
+      DayEntry(
+        dayKey: today.dayKey,
+        steps: snapshot.steps,
+        activeMinutes: snapshot.activeMinutes,
+        weekday: today.weekday,
+      ),
+    ];
   }
 
   Future<void> _openProfile() async {

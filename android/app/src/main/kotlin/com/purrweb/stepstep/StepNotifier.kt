@@ -11,27 +11,26 @@ import androidx.core.app.NotificationCompat
 import kotlin.math.roundToInt
 
 /**
- * Builds and posts the ongoing lock-screen notification.
+ * Builds and posts the notification [StepTrackingService] runs under.
  *
- * Used to live inside `StepService`, which kept itself alive purely to own
- * this notification. Now it is posted by whatever briefly-running component
- * last read the sensor — [StepRefreshWorker] on a schedule, or
- * [MainActivity] right after the user opens the app or changes a setting —
- * and stays on screen exactly as before between those reads, since an
- * "ongoing" notification's dismiss-resistance is a property of the
- * notification itself, not of a service keeping it posted.
+ * A foreground service must show *a* notification, so there are two: the
+ * lock-screen one with the ring (the reason the app has a notification at
+ * all), and a collapsed one on its own quiet channel for when the user turns
+ * the lock-screen display off in the profile. Counting continues either way.
  */
 object StepNotifier {
     const val CHANNEL_ID = "steps_live"
+    const val QUIET_CHANNEL_ID = "steps_quiet"
     const val NOTIFICATION_ID = 1001
 
     private const val RING_BITMAP_PX = 192
+    private const val DISMISS_REQUEST_CODE = 4713
 
     private const val ACCENT = 0xFF22E8B4.toInt()
     private const val GOLD = 0xFFFFC94A.toInt()
 
-    fun createChannel(context: Context) {
-        val channel = NotificationChannel(
+    fun createChannels(context: Context) {
+        val live = NotificationChannel(
             CHANNEL_ID,
             "Счётчик шагов",
             // LOW keeps it silent but still on the lock screen and status bar.
@@ -43,33 +42,39 @@ object StepNotifier {
             enableVibration(false)
             setSound(null, null)
         }
-        notificationManager(context).createNotificationChannel(channel)
+        val quiet = NotificationChannel(
+            QUIET_CHANNEL_ID,
+            "Фоновый подсчёт",
+            // MIN: no status-bar icon, collapsed at the bottom of the shade.
+            NotificationManager.IMPORTANCE_MIN,
+        ).apply {
+            description = "Свёрнутое уведомление, пока шаги на экране блокировки выключены"
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
+            enableVibration(false)
+            setSound(null, null)
+        }
+        notificationManager(context).createNotificationChannels(listOf(live, quiet))
     }
 
-    /** Posts (or refreshes) the ongoing notification from the current snapshot. */
-    fun post(context: Context, snapshot: StepRepository.Snapshot) {
-        notificationManager(context).notify(NOTIFICATION_ID, build(context, snapshot))
+    /** Posts (or refreshes) the notification from the current snapshot. */
+    fun post(context: Context, snapshot: StepRepository.Snapshot, live: Boolean) {
+        notificationManager(context).notify(NOTIFICATION_ID, build(context, snapshot, live))
     }
 
-    fun cancel(context: Context) {
-        notificationManager(context).cancel(NOTIFICATION_ID)
-    }
+    /**
+     * @param live true for the lock-screen notification with the ring, false
+     *   for the collapsed one on [QUIET_CHANNEL_ID].
+     */
+    fun build(context: Context, snapshot: StepRepository.Snapshot, live: Boolean): Notification =
+        if (live) buildLive(context, snapshot) else buildQuiet(context, snapshot)
 
-    private fun build(context: Context, snapshot: StepRepository.Snapshot): Notification {
+    private fun buildLive(context: Context, snapshot: StepRepository.Snapshot): Notification {
         val goalReached = snapshot.steps >= snapshot.goal
         val ring = RingRenderer.render(
             sizePx = RING_BITMAP_PX,
             progress = snapshot.progress,
             goalReached = goalReached,
-        )
-
-        val openApp = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val collapsed = RemoteViews(context.packageName, R.layout.notification_steps).apply {
@@ -110,7 +115,8 @@ object StepNotifier {
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setContentIntent(openApp)
+            .setContentIntent(openApp(context))
+            .setDeleteIntent(dismissed(context))
             .setColor(if (goalReached) GOLD else ACCENT)
             .setOngoing(true)
             .setSilent(true)
@@ -121,8 +127,49 @@ object StepNotifier {
             // locked screen, which is exactly where we want it visible.
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            // Android 12+ otherwise holds a new foreground-service
+            // notification back for up to 10 seconds; the ring is the whole
+            // point, so show it straight away.
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
+
+    private fun buildQuiet(context: Context, snapshot: StepRepository.Snapshot): Notification =
+        NotificationCompat.Builder(context, QUIET_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_steps)
+            .setContentTitle("Шаги сегодня: ${Metrics.formatSteps(snapshot.steps)}")
+            .setContentText("Подсчёт идёт в фоне")
+            .setContentIntent(openApp(context))
+            .setDeleteIntent(dismissed(context))
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .build()
+
+    private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /**
+     * Fires only when the user swipes the notification away, never when the
+     * app replaces it — see [StepRepository.isNotificationDismissed].
+     */
+    private fun dismissed(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        DISMISS_REQUEST_CODE,
+        Intent(context, StepRefreshReceiver::class.java)
+            .setAction(StepRefreshReceiver.ACTION_NOTIFICATION_DISMISSED),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
     private fun summaryLine(
         snapshot: StepRepository.Snapshot,

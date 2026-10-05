@@ -46,6 +46,7 @@ List<Map<String, dynamic>> _syntheticRange(Map<dynamic, dynamic> arguments) {
 /// `flutter test --update-goldens test/golden` after a deliberate one.
 void main() {
   const channel = MethodChannel('com.purrweb.stepstep/steps');
+  const liveChannel = EventChannel('com.purrweb.stepstep/live');
 
   const snapshot = <String, dynamic>{
     'steps': 8432,
@@ -86,11 +87,18 @@ void main() {
             _ => null,
           };
         });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          liveChannel,
+          MockStreamHandler.inline(onListen: (arguments, events) {}),
+        );
   });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(liveChannel, null);
   });
 
   void usePhoneViewport(WidgetTester tester) {

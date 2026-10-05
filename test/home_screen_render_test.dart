@@ -13,6 +13,9 @@ import 'package:stepstep/theme/app_theme.dart';
 /// overflow, which turns that into something CI can catch.
 void main() {
   const channel = MethodChannel('com.purrweb.stepstep/steps');
+  // The live stream the home screen subscribes to; silent here, since the
+  // tests render from the snapshot alone.
+  const liveChannel = EventChannel('com.purrweb.stepstep/live');
 
   // A believable mid-afternoon: goal not yet reached, a full week behind it.
   const snapshot = <String, dynamic>{
@@ -52,11 +55,18 @@ void main() {
             _ => null,
           };
         });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          liveChannel,
+          MockStreamHandler.inline(onListen: (arguments, events) {}),
+        );
   });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(liveChannel, null);
   });
 
   /// Nothing Phone (1): 1080x2400 at 2.75x.

@@ -58,8 +58,8 @@ class StepPermissions {
   }
 
   /// Whether the system currently lets this app run unrestricted in the
-  /// background — without it, Doze/OEM battery management can defer the
-  /// periodic refresh well past the interval chosen in settings.
+  /// background — without it, Doze/OEM battery management may stop the
+  /// native counter, and it cannot restart itself from the background.
   Future<bool> isIgnoringBatteryOptimizations() async {
     try {
       return await _channel.invokeMethod<bool>(

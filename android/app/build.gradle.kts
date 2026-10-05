@@ -73,10 +73,10 @@ dependencies {
     // lock-screen layouts inherit, so they follow the system theme instead of
     // hardcoding light-on-dark.
     implementation("androidx.core:core-ktx:1.13.1")
-    // Runs the periodic sensor-read-and-refresh off an AlarmManager/system
-    // schedule without a process kept alive in between — the whole point of
-    // dropping the always-on foreground service.
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Plain JVM tests for StepLedger — the step arithmetic has no Android
+    // dependencies precisely so it can be tested without a device.
+    testImplementation("junit:junit:4.13.2")
 }
 
 flutter {

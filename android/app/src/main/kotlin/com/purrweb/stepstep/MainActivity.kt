@@ -7,10 +7,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -18,8 +21,9 @@ import io.flutter.plugin.common.MethodChannel
  * Bridges Flutter to the native step store.
  *
  * Flutter deliberately keeps no second copy of the step data — it asks for a
- * snapshot. That is what keeps the UI, the widget and the lock-screen
- * notification from ever showing three different numbers.
+ * snapshot, and listens on [LIVE_CHANNEL] for fresh ones while it is open.
+ * That is what keeps the UI, the widget and the lock-screen notification
+ * from ever showing three different numbers.
  */
 class MainActivity : FlutterActivity() {
 
@@ -27,22 +31,51 @@ class MainActivity : FlutterActivity() {
     private val permissions: PermissionCoordinator by lazy {
         PermissionCoordinator(this)
     }
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** The open app's subscription to [StepLive], while Flutter listens. */
+    private var liveListener: ((StepRepository.Snapshot) -> Unit)? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        StepNotifier.createChannel(this)
+        StepNotifier.createChannels(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler(::handle)
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, LIVE_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    stopLive()
+                    val listener: (StepRepository.Snapshot) -> Unit = { snapshot ->
+                        // StepLive calls back on the service thread; event
+                        // sinks must be used on the main one.
+                        mainHandler.post { events.success(snapshot.toMap()) }
+                    }
+                    liveListener = listener
+                    StepLive.add(listener)
+                }
+
+                override fun onCancel(arguments: Any?) = stopLive()
+            })
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        stopLive()
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     override fun onResume() {
         super.onResume()
-        // The schedule can be gone for reasons the app never hears about: the
-        // system reclaimed the alarm, the package was replaced. Opening the
-        // app is the one moment we know we can put it back. Re-arming an
-        // already-armed schedule is a no-op beyond replacing it with itself.
+        // The service can be gone for reasons the app never hears about: the
+        // ROM killed it, the user force-stopped the app. Opening the app is
+        // the one moment a foreground-service start is always allowed, so
+        // put everything back. Starting a running service just nudges it to
+        // re-read and repaint.
         if (repository.isOnboarded) {
+            // Opening the app is the signal to bring back a notification the
+            // user swiped away.
+            repository.isNotificationDismissed = false
             RefreshScheduler.ensureScheduled(this)
         }
     }
@@ -53,9 +86,9 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         if (permissions.onRequestPermissionsResult(requestCode)) {
-            // Newly granted activity recognition means the schedule can
-            // finally do something useful, so arm it without waiting for
-            // another user action.
+            // Newly granted activity recognition is what lets the service
+            // start at all, so start it without waiting for another user
+            // action.
             if (repository.isOnboarded) {
                 RefreshScheduler.ensureScheduled(this)
             }
@@ -155,53 +188,53 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
             }
 
+            // Lets the profile screen show the Xiaomi-only autostart hint:
+            // HyperOS/MIUI keeps background apps from starting on their own
+            // until the user allows it, on top of stock Android's rules.
+            "deviceManufacturer" -> result.success(Build.MANUFACTURER.orEmpty())
+
             "hasStepSensor" -> result.success(hasStepSensor())
 
             "isLiveNotificationEnabled" ->
                 result.success(repository.isLiveNotificationEnabled)
 
+            // Off does not stop counting: the service keeps running under the
+            // collapsed notification on the quiet channel instead.
             "setLiveNotificationEnabled" -> {
                 val enabled = call.argument<Boolean>("enabled") ?: true
                 repository.isLiveNotificationEnabled = enabled
-                if (enabled) {
-                    StepNotifier.post(this, repository.snapshot())
-                } else {
-                    StepNotifier.cancel(this)
-                }
+                repository.isNotificationDismissed = false
+                if (!StepTrackingService.repaint()) RefreshScheduler.ensureScheduled(this)
                 result.success(enabled)
             }
 
             "startTracking" -> {
                 repository.isOnboarded = true
                 RefreshScheduler.ensureScheduled(this)
-                RefreshScheduler.refreshNow(this)
                 result.success(null)
             }
 
-            "refreshIntervalMinutes" -> result.success(repository.refreshIntervalMinutes)
-
-            "setRefreshIntervalMinutes" -> {
-                val minutes = call.argument<Int>("minutes") ?: StepRepository.DEFAULT_REFRESH_INTERVAL_MIN
-                repository.refreshIntervalMinutes = minutes
-                RefreshScheduler.schedulePeriodic(this, repository.refreshIntervalMinutes)
-                result.success(repository.refreshIntervalMinutes)
+            // A freshly opened app should show steps up to this moment, not
+            // up to the last batch the service happened to receive.
+            "refreshFromSensor" -> {
+                val viaService = StepTrackingService.refresh {
+                    mainHandler.post { result.success(repository.snapshot().toMap()) }
+                }
+                if (!viaService) readSensorOnce(result)
             }
-
-            // Pulls the hardware counter directly so a freshly opened app shows
-            // steps taken since the last scheduled read, without waiting for
-            // the next one.
-            "refreshFromSensor" -> readSensorOnce(result)
 
             else -> result.notImplemented()
         }
     }
 
-    /** Repaints the widgets and, if enabled, the ongoing notification. */
+    private fun stopLive() {
+        liveListener?.let(StepLive::remove)
+        liveListener = null
+    }
+
+    /** Repaints the widgets and the notification; without the service, just the widgets. */
     private fun refreshDisplays() {
-        Widgets.updateAll(this)
-        if (repository.isLiveNotificationEnabled) {
-            StepNotifier.post(this, repository.snapshot())
-        }
+        if (!StepTrackingService.repaint()) Widgets.updateAll(this)
     }
 
     private fun hasStepSensor(): Boolean =
@@ -225,9 +258,11 @@ class MainActivity : FlutterActivity() {
         getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
     /**
-     * Registers for a single `TYPE_STEP_COUNTER` reading, folds it into the
-     * repository and returns the resulting snapshot. Falls back to the stored
-     * snapshot if the sensor stays quiet.
+     * Fallback for when [StepTrackingService] is not running (e.g. the
+     * permission is still missing): registers for a single
+     * `TYPE_STEP_COUNTER` reading, folds it into the repository and returns
+     * the resulting snapshot. Falls back to the stored snapshot if the
+     * sensor stays quiet.
      */
     private fun readSensorOnce(result: MethodChannel.Result) {
         val manager = sensorManager()
@@ -237,7 +272,6 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        val handler = Handler(Looper.getMainLooper())
         var settled = false
 
         val listener = object : SensorEventListener {
@@ -245,10 +279,17 @@ class MainActivity : FlutterActivity() {
                 if (settled) return
                 settled = true
                 manager.unregisterListener(this)
-                handler.removeCallbacksAndMessages(null)
+                mainHandler.removeCallbacksAndMessages(SENSOR_TIMEOUT_TOKEN)
 
                 event.values.firstOrNull()?.let {
-                    repository.recordRawCounter(it.toLong())
+                    repository.recordRawCounter(
+                        it.toLong(),
+                        StepLedger.eventWallMillis(
+                            timestampNanos = event.timestamp,
+                            nowMillis = System.currentTimeMillis(),
+                            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                        ),
+                    )
                 }
                 refreshDisplays()
                 result.success(repository.snapshot().toMap())
@@ -259,17 +300,26 @@ class MainActivity : FlutterActivity() {
 
         manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
 
-        handler.postDelayed({
-            if (settled) return@postDelayed
-            settled = true
-            manager.unregisterListener(listener)
-            result.success(repository.snapshot().toMap())
-        }, SENSOR_READ_TIMEOUT_MS)
+        mainHandler.postAtTime(
+            {
+                if (!settled) {
+                    settled = true
+                    manager.unregisterListener(listener)
+                    result.success(repository.snapshot().toMap())
+                }
+            },
+            SENSOR_TIMEOUT_TOKEN,
+            SystemClock.uptimeMillis() + SENSOR_READ_TIMEOUT_MS,
+        )
     }
 
     private companion object {
         const val CHANNEL = "com.purrweb.stepstep/steps"
+        const val LIVE_CHANNEL = "com.purrweb.stepstep/live"
         const val SENSOR_READ_TIMEOUT_MS = 1_500L
         const val DEFAULT_HISTORY_DAYS = 7
+
+        /** Lets the timeout be cancelled without clearing the live channel's posts. */
+        val SENSOR_TIMEOUT_TOKEN = Any()
     }
 }
