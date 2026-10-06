@@ -61,14 +61,23 @@ object RefreshScheduler {
 
     /**
      * 1.4.x scheduled a periodic WorkManager job. The library is gone, but
-     * JobScheduler would keep the persisted job (and its wake-ups) across the
-     * update, so cancel it once. Nothing else in the app uses JobScheduler.
+     * JobScheduler keeps the persisted job across the update, so cancel it
+     * once. Nothing else in the app uses JobScheduler.
+     *
+     * On Android 14+ WorkManager schedules into its own JobScheduler
+     * namespace ("androidx.work.systemjobscheduler"), which a plain
+     * cancelAll() does not reach — 1.5.0 missed it exactly that way.
      */
     private fun clearLegacyWork(context: Context) {
         val repository = StepRepository(context)
         if (repository.isLegacyWorkCleared) return
         runCatching {
-            (context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler).cancelAll()
+            val jobs = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                jobs.cancelInAllNamespaces()
+            } else {
+                jobs.cancelAll()
+            }
         }
         repository.isLegacyWorkCleared = true
     }

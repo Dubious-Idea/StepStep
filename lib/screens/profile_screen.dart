@@ -498,10 +498,12 @@ class _BatteryOptimizationRow extends StatelessWidget {
 }
 
 /// Xiaomi-only: HyperOS/MIUI keep their own autostart and battery switches on
-/// top of stock Android's. Without autostart the counter does not come back
-/// after a reboot or after the ROM clears memory. There is no API to read
-/// either switch, so this always shows and just opens the app's system page,
-/// where HyperOS lists both.
+/// top of stock Android's, and clear memory when the screen locks
+/// ("LockScreenClean") — on a Poco M6 that killed even the running
+/// foreground service. Without autostart the counter then stays down until
+/// the 23:59 alarm or the next app open; locking the app in Recents keeps
+/// the cleaner off it. There is no API to read these switches, so this
+/// always shows and just opens the app's system page.
 class _HyperOsSettingsRow extends StatelessWidget {
   const _HyperOsSettingsRow({required this.onTap});
 
@@ -529,8 +531,9 @@ class _HyperOsSettingsRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Включите автозапуск и «Без ограничений» в разделе батареи '
-                  '— иначе подсчёт остановится после перезагрузки',
+                  'Включите автозапуск, «Без ограничений» в разделе батареи '
+                  'и закрепите приложение в недавних — иначе HyperOS '
+                  'выгружает подсчёт при блокировке экрана',
                   style: AppText.body.copyWith(fontSize: 12),
                 ),
               ],

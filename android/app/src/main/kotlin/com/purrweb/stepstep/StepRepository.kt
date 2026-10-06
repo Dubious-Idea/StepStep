@@ -324,7 +324,9 @@ class StepRepository(context: Context) {
         private const val KEY_ONBOARDED = "profile_onboarded"
         private const val KEY_LIVE_NOTIFICATION = "profile_live_notification"
         private const val KEY_NOTIFICATION_DISMISSED = "notification_dismissed"
-        private const val KEY_LEGACY_WORK_CLEARED = "legacy_work_cleared"
+        // v2: 1.5.0 set the original flag without reaching WorkManager's
+        // JobScheduler namespace, so the cleanup has to run once more.
+        private const val KEY_LEGACY_WORK_CLEARED = "legacy_work_cleared_v2"
         private const val KEY_SKIPPED_VERSION = "update_skipped_version"
         private const val KEY_AUTO_UPDATE_CHECK = "update_auto_check_enabled"
         private const val KEY_LAST_AUTO_UPDATE_CHECK = "update_last_auto_check_millis"
