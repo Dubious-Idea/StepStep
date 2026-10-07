@@ -2,6 +2,7 @@ package com.purrweb.stepstep
 
 import android.Manifest
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -81,6 +82,32 @@ class PermissionCoordinator(private val activity: Activity) {
                 Uri.fromParts("package", activity.packageName, null),
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    /**
+     * Opens HyperOS/MIUI's autostart list. HyperOS 2 has no autostart switch
+     * on the app's own settings page — it lives in this cross-app list under
+     * Settings → Apps — so the profile hint has to land here directly.
+     * Tries the known screen first, then the action it is registered for (in
+     * case a ROM moves the class), and falls back to the app's settings page
+     * on anything that is not MIUI-based.
+     */
+    fun openAutostartSettings() {
+        val candidates = listOf(
+            Intent().setComponent(
+                ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                ),
+            ),
+            Intent("miui.intent.action.OP_AUTO_START"),
+        )
+        val opened = candidates.any { intent ->
+            runCatching {
+                activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+        }
+        if (!opened) openAppSettings()
     }
 
     /**

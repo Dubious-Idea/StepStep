@@ -57,6 +57,18 @@ class StepPermissions {
     }
   }
 
+  /// HyperOS/MIUI's autostart list — HyperOS 2 has no autostart switch on the
+  /// app's own settings page. Natively falls back to that page elsewhere.
+  Future<void> openAutostartSettings() async {
+    try {
+      await _channel.invokeMethod<void>('openAutostartSettings');
+    } on PlatformException {
+      // Nothing else to offer if no settings screen will open.
+    } on MissingPluginException {
+      // Not running on a platform with the native side.
+    }
+  }
+
   /// Whether the system currently lets this app run unrestricted in the
   /// background — without it, Doze/OEM battery management may stop the
   /// native counter, and it cannot restart itself from the background.
