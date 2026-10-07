@@ -180,6 +180,11 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
             }
 
+            "openAutostartSettings" -> {
+                permissions.openAutostartSettings()
+                result.success(null)
+            }
+
             "isIgnoringBatteryOptimizations" ->
                 result.success(permissions.isIgnoringBatteryOptimizations())
 

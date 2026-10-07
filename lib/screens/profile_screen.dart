@@ -255,7 +255,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   if (_isXiaomi) ...[
                     const SizedBox(height: AppSpacing.lg),
-                    _HyperOsSettingsRow(onTap: _permissions.openSettings),
+                    _HyperOsSettingsRow(
+                      onTap: _permissions.openAutostartSettings,
+                    ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
                   _AutoUpdateCheckToggle(
@@ -503,7 +505,8 @@ class _BatteryOptimizationRow extends StatelessWidget {
 /// foreground service. Without autostart the counter then stays down until
 /// the 23:59 alarm or the next app open; locking the app in Recents keeps
 /// the cleaner off it. There is no API to read these switches, so this
-/// always shows and just opens the app's system page.
+/// always shows. It opens the autostart list directly — HyperOS 2 has no
+/// autostart switch on the app's own settings page.
 class _HyperOsSettingsRow extends StatelessWidget {
   const _HyperOsSettingsRow({required this.onTap});
 
